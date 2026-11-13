@@ -382,7 +382,7 @@ template = template[:_m.start()] + (
     '          <p class="note" style="margin:2px 0 0 30px;font-size:11px;color:#777">L2 stiffens part way down and clicks through just before the ninja magic fires.</p>\n'
     '        </div>\n'
     '        </sc-if>') + template[_m.start():]
-css_tabs = ('html.manual-only body>*:not([role=dialog]){visibility:hidden!important}html body .pad-focus.pad-focus.pad-focus{outline:3px solid #ff1f3d!important;outline-offset:-3px!important;box-shadow:inset 0 0 14px rgba(255,31,61,.55),0 0 14px rgba(255,31,61,.7)!important;position:relative;z-index:2}.tabs{margin:0 0 6px}.tabs .seg{flex:1 1 auto;min-width:0;padding-left:3px!important;padding-right:3px!important;font-size:12px!important;letter-spacing:0!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.tabbed .grp>*{animation:none!important;opacity:1!important}'
+css_tabs = ('html.manual-only body>*:not([role=dialog]){visibility:hidden!important}html body .pad-focus.pad-focus.pad-focus{outline:3px solid #ff1f3d!important;outline-offset:-3px!important;box-shadow:inset 0 0 14px rgba(255,31,61,.55),0 0 14px rgba(255,31,61,.7)!important;position:relative;z-index:2}.tabs{margin:0 0 6px}.tabs .seg{flex:1 1 auto;min-width:0;padding-left:3px!important;padding-right:3px!important;font-size:12px!important;letter-spacing:0!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.tabbed .grp>*{animation:none!important;opacity:1!important}.segs:has(.seg:nth-of-type(6)) .seg{font-size:13px!important;padding-left:2px!important;padding-right:2px!important;letter-spacing:0!important;white-space:nowrap}'
             '.grp>sc-if>div,.grp sc-if>div{margin-bottom:2px}')
 template = must_replace(template, '@media (prefers-reduced-motion:reduce)', css_tabs + '@media (prefers-reduced-motion:reduce)')
 
@@ -458,7 +458,7 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
     '        </sc-if>\n'
     '        <sc-if value="{{tabPerf}}" hint-placeholder-val="{{false}}">\n' +
     _chkrow('Frame Generation (F4)', 'fg', 'toggleFg', 'In-between pictures on a 120 Hz+ screen: much smoother motion, about 16 ms more delay.') +
-    _segrow('Frame Generation Target', 'fgtOpts', 6, 'Pictures a second with frame generation. Monitor = just under your screen&#39;s refresh.') +
+    _segrow('Frame Generation Target', 'fgtOpts', 6, 'Pictures a second with frame generation. Auto = just under your screen&#39;s refresh.') +
     _chkrow('Low Latency (F6)', 'lowlat', 'toggleLowlat', 'Stops the graphics driver queueing frames: 16-33 ms less delay, like NVIDIA Reflex.') +
     _chkrow('Performance Overlay (F2)', 'ovl', 'toggleOvl', 'FPS, frame time, 1% lows, CPU, GPU, RAM and VRAM in the top-left corner.') +
     '        </sc-if>\n        <sc-if value="{{tabController}}"')
@@ -1466,7 +1466,7 @@ L("""      tabController: s.tab === 'controller',""",
   """      tabController: s.tab === 'controller',
       tabEffects: s.tab === 'effects',
       tabPerf: s.tab === 'perf',
-      fgtOpts: [['monitor', 'Monitor'], ['120', '120'], ['144', '144'], ['240', '240'], ['360', '360'], ['unlimited', 'Max']].map((o) => ({ name: o[1], on: (s.fgt || 'monitor') === o[0], cls: (s.fgt || 'monitor') === o[0] ? 'on' : '', pick: () => this.setState({ fgt: o[0] }) })),
+      fgtOpts: [['monitor', 'Auto'], ['120', '120'], ['144', '144'], ['240', '240'], ['360', '360'], ['unlimited', 'Max']].map((o) => ({ name: o[1], on: (s.fgt || 'monitor') === o[0], cls: (s.fgt || 'monitor') === o[0] ? 'on' : '', pick: () => this.setState({ fgt: o[0] }) })),
       blendOpts: [['minimum', 'Min'], ['basic', 'Basic'], ['medium', 'Medium'], ['high', 'High']].map((o) => ({ name: o[1], on: (s.blend || 'basic') === o[0], cls: (s.blend || 'basic') === o[0] ? 'on' : '', pick: () => this.setState({ blend: o[0] }) })),
       texfOpts: [['ps2', 'As on PS2'], ['bilinear', 'Bilinear']].map((o) => ({ name: o[1], on: (s.texf || 'ps2') === o[0], cls: (s.texf || 'ps2') === o[0] ? 'on' : '', pick: () => this.setState({ texf: o[0] }) })),
       scrfOpts: [['sharp', 'Sharp'], ['smooth', 'Smooth'], ['scanlines', 'Scanlines'], ['crt', 'CRT']].map((o) => ({ name: o[1], on: (s.scrf || 'smooth') === o[0], cls: (s.scrf || 'smooth') === o[0] ? 'on' : '', pick: () => this.setState({ scrf: o[0] }) })),
