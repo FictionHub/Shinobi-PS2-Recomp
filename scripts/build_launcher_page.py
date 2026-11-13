@@ -452,8 +452,8 @@ template = template[:_i] + ('\n          <label class="chk" title="Also F3 in ga
                             + CHK + 'Close-Up Camera (F3)</label>'
                             + '\n          <label class="chk" title="Also F5 in game"><input type="checkbox" checked="{{hud}}" sc-camel-on-change="{{toggleHud}}">'
                             + CHK + 'Hide HUD (F5)</label>'
-                            + '\n          <label class="chk" title="No black bars in the TATE kill camera and the game&#39;s own scenes. Also Shift+F5 in game"><input type="checkbox" checked="{{bars}}" sc-camel-on-change="{{toggleBars}}">'
-                            + CHK + 'Hide Cinematic Bars (Shift+F5)</label>') + template[_i:]
+                            + '\n          <label class="chk" title="Hides the black cinematic bars (the TATE kill camera, the game&#39;s own scenes). Also Shift+F5 in game"><input type="checkbox" checked="{{bars}}" sc-camel-on-change="{{toggleBars}}">'
+                            + CHK + 'Hide Bars (Shift+F5)</label>') + template[_i:]
 
 # ---- LOCAL PATCH: the Performance tab (frame generation, its target, low latency, the overlay) ----
 template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
@@ -984,10 +984,11 @@ L("""  keyName(e) {
 
 L("""    const RES = [['720p', '1280 x 720'], ['1080p', '1920 x 1080'], ['1440p', '2560 x 1440'], ['4K', '3840 x 2160']];""",
   """    // The PCSX2 renderer draws at a whole multiple of the PS2's 448 lines.
-    const RES = [['Native', '1x  640 x 448'], ['720p', '2x  1280 x 896'], ['1080p', '3x  1920 x 1344'], ['1440p', '4x  2560 x 1792'], ['4K', '6x  3840 x 2688 · needs a strong GPU']]
+    // Shown as the familiar name and the PS2 picture's scale (the picture is 640 x 448 times that, then fitted to the screen).
+    const RES = [['Native', '1x'], ['720p', '2x'], ['1080p', '3x'], ['1440p', '4x'], ['4K', '6x']]
       // 8K (12x): PCSX2's highest upscale, for very powerful graphics cards. Lowered automatically on cards with too
       // little video memory.
-      .concat([['8K', '12x  7680 x 5376 · experimental, high-end GPU']]);""")
+      .concat([['8K', '12x']]);""")
 
 if guide_ids:
     for key, cap, label, _ in GUIDES:
@@ -1568,6 +1569,10 @@ L("""  navTab(d) {""",
   }
 
   navTab(d) {""")
+
+# Resolution: the GPU warning as a notice when 4K / 8K is picked (it no longer fits in the label).
+L("""pick: set({ res: r[0], resOpen: false })""",
+  """pick: () => { this.setState({ res: r[0], resOpen: false }); if (r[0] === '4K') this.toastMsg('4K needs a strong graphics card'); else if (r[0] === '8K') this.toastMsg('8K is experimental: high-end graphics cards only'); }""")
 
 template = template[:logic_start] + logic + template[logic_end:]
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))
