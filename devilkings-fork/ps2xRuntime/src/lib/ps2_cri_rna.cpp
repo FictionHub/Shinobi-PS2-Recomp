@@ -10,7 +10,7 @@
 // amount from every channel, into one stereo queue per RNA object, and the sound callback mixes those queues into the
 // output (resampled, with the object's volume). GetNumData / GetNumRoom report that queue, so ADX's clock (samples
 // decoded minus samples still queued) stays exact. The DTRs are never started, so the IOP module just idles.
-// Credit: the analysis in GitHub issue #2 (LgSetzeR). PS2X_CRI_RNA_HLE=0 turns it off.
+// Credit: the analysis in GitHub issue #2 (LgSetzeR). PS2X_CRI_RNA_HLE=1 turns it on (off by default for now).
 //
 // RNA object (from this ELF): +0x10 + ch*4 DTR, +0x24 play switch (s8), +0x26 channel count (s8), +0x28 sample rate,
 // +0x30 volume (0.1 dB, 0..-999), +0x48 transfer switch (s8), +0x4B discard switch. DTR +0x4: source SJ.
@@ -254,8 +254,9 @@ namespace
 // At start-up, after the game's functions are registered (ps2_runtime.cpp loadELF).
 void ps2xCriRnaInstall(PS2Runtime &runtime)
 {
-    const char *off = std::getenv("PS2X_CRI_RNA_HLE");
-    if (off && off[0] == '0')
+    // Opt-in until it has been checked on every screen (title music): PS2X_CRI_RNA_HLE=1.
+    const char *on = std::getenv("PS2X_CRI_RNA_HLE");
+    if (!on || on[0] != '1')
         return;
     if (!runtime.hasFunction(kExecHndl) || !runtime.hasFunction(kGetNumData) || !runtime.hasFunction(kGetNumRoom))
         return;
