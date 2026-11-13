@@ -557,7 +557,7 @@ namespace ps2x::settings
             // LOCAL PATCH: low latency (ps2_runtime.cpp, after each window frame).
             add({"video", "low_latency", "Low latency",
                  "Stops the graphics driver queueing finished pictures ahead of the screen, which removes about 16-33 ms of "
-                 "delay (what NVIDIA Reflex does in other games). Best with frame generation or V-Sync on.",
+                 "delay (what NVIDIA Reflex does in other games). Best with frame generation or V-Sync on. Shift+F6 in game.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH: frame generation (ps2_framegen.cpp). F6 in game.
             add({"video", "frame_generation", "Frame generation",

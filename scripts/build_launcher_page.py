@@ -456,8 +456,8 @@ template = template[:_i] + ('\n          <label class="chk" title="Also F2 in ga
                             + CHK + 'Hide HUD (F5)</label>'
                             + '\n          <label class="chk" title="On a 120 Hz+ screen: smoother motion, about 16 ms more delay. Also F6 in game"><input type="checkbox" checked="{{fg}}" sc-camel-on-change="{{toggleFg}}">'
                             + CHK + 'Frame Generation (F6)</label>'
-                            + '\n          <label class="chk" title="Removes the 16-33 ms the graphics driver adds by queueing frames (like NVIDIA Reflex)"><input type="checkbox" checked="{{lowlat}}" sc-camel-on-change="{{toggleLowlat}}">'
-                            + CHK + 'Low Latency</label>') + template[_i:]
+                            + '\n          <label class="chk" title="Removes the 16-33 ms the graphics driver adds by queueing frames (like NVIDIA Reflex). Also Shift+F6 in game"><input type="checkbox" checked="{{lowlat}}" sc-camel-on-change="{{toggleLowlat}}">'
+                            + CHK + 'Low Latency (Shift+F6)</label>') + template[_i:]
 
 # ---- LOCAL PATCH: invert camera switches in Configure Controller (Gamepad view) ----
 template = must_replace(template, '              <p class="note">{{bindNote}}</p>',

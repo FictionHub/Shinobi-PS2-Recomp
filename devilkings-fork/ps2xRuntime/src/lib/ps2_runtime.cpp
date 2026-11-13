@@ -4541,8 +4541,16 @@ void PS2Runtime::run()
             ps2x::settings::save();
             ps2xHotkeyToast("Close-up camera", on);
         }
+        // LOCAL PATCH: Shift+F6 switches low latency (saved).
+        if (IsKeyPressed(KEY_F6) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        {
+            const bool on = !ps2x::settings::getBool("video", "low_latency");
+            ps2x::settings::set("video", "low_latency", on ? "true" : "false");
+            ps2x::settings::save();
+            ps2xHotkeyToast("Low latency", on);
+        }
         // LOCAL PATCH: F6 switches frame generation (ps2_framegen.cpp; saved).
-        if (IsKeyPressed(KEY_F6))
+        else if (IsKeyPressed(KEY_F6))
         {
             const bool on = !ps2x::settings::getBool("video", "frame_generation");
             ps2x::settings::set("video", "frame_generation", on ? "true" : "false");
