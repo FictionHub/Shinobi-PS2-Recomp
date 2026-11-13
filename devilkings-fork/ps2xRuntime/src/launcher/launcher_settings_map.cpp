@@ -102,6 +102,7 @@ namespace launcher
            << ",hud:" << b(truthy(get("game", "hide_hud", "false")))
            << ",fg:" << b(truthy(get("video", "frame_generation", "false")))
            << ",lowlat:" << b(truthy(get("video", "low_latency", "false")))
+           << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
            << ",scarf:" << jsonString(scarfColour(get("game", "scarf_color", "original")))
            << ",win:" << jsonString(get("video", "window", "borderless"))
            << ",haptics:" << b(truthy(get("input", "haptics", "true")))
@@ -183,6 +184,11 @@ namespace launcher
             set("game", "hide_hud", b(get("hud", "0") == "1"));
             set("video", "frame_generation", b(get("fg", "0") == "1"));
             set("video", "low_latency", b(get("lowlat", "0") == "1"));
+            {
+                const std::string fgt = get("fgt", "monitor");
+                set("video", "framegen_target",
+                    (fgt == "120" || fgt == "144" || fgt == "240" || fgt == "360" || fgt == "unlimited") ? fgt : std::string("monitor"));
+            }
         }
         // LOCAL PATCH (mod): Hotsuma's scarf colour, "original" or #rrggbb.
         {

@@ -554,15 +554,21 @@ namespace ps2x::settings
             add({"game", "close_camera", "Close-up camera",
                  "A closer, over-the-shoulder camera for more intimate combat. F3 switches it while playing.", Kind::Bool,
                  "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH: how many pictures a second frame generation shows (ps2_runtime.cpp, the window loop's cap).
+            add({"video", "framegen_target", "Frame generation target",
+                 "Pictures a second with frame generation: just under your screen's refresh (best with G-Sync / FreeSync), "
+                 "a fixed number, or as many as the PC can make.",
+                 Kind::Choice, "monitor", nullptr, {"monitor", "120", "144", "240", "360", "unlimited"},
+                 {"Monitor", "120", "144", "240", "360", "Unlimited"}, 0, 0, nullptr, true});
             // LOCAL PATCH: low latency (ps2_runtime.cpp, after each window frame).
             add({"video", "low_latency", "Low latency",
                  "Stops the graphics driver queueing finished pictures ahead of the screen, which removes about 16-33 ms of "
-                 "delay (what NVIDIA Reflex does in other games). Best with frame generation or V-Sync on. Shift+F6 in game.",
+                 "delay (what NVIDIA Reflex does in other games). Best with frame generation or V-Sync on. F6 in game.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
-            // LOCAL PATCH: frame generation (ps2_framegen.cpp). F6 in game.
+            // LOCAL PATCH: frame generation (ps2_framegen.cpp). F4 in game.
             add({"video", "frame_generation", "Frame generation",
                  "On a 120 Hz or faster screen, adds in-between pictures made from the game's own, so motion is as smooth "
-                 "as the screen. Adds about one frame (16 ms) of delay. F6 switches it while playing.",
+                 "as the screen. Adds about one frame (16 ms) of delay. F4 switches it while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): hide the HUD (ps2_hud_mod.cpp). F5 in game.
             add({"game", "hide_hud", "Hide HUD",

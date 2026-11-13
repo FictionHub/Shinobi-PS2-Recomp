@@ -307,7 +307,7 @@ template = re.sub(r'<p>Ignite the fiery vengeance.*?</p>', '<p>{{cardText}}</p>'
 template = must_replace(template, '<button class="btn" sc-camel-on-click="{{openCredits}}"><span class="lab">Credits</span></button>',
                         '<div style="display:flex;gap:8px">'
                         '<button class="btn" style="flex:1 1 0;min-width:0" title="The game manual (your own PDF), turned like a book" '
-                        'sc-camel-on-click="{{openManual}}" title="In game: F4"><span class="lab">Manual</span></button>'
+                        'sc-camel-on-click="{{openManual}}"><span class="lab">Manual</span></button>'
                         '<button class="btn {{lastCls}}" style="flex:1 1 0;min-width:0" sc-camel-on-click="{{lastBtn}}"><span class="lab">{{lastLabel}}</span></button>'
                         '</div>')
 template = must_replace(template, '<button class="btn sm" sc-camel-on-click="{{reset}}"><span class="lab">Reset to Defaults</span></button>',
@@ -446,18 +446,22 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
     _chkrow('Upscaling Fixes', 'upfix', 'toggleUpfix', 'Removes seams and thin lines at high resolutions. Applies after a restart.') +
     '        </sc-if>\n        <sc-if value="{{tabController}}"')
 
-# ---- LOCAL PATCH: performance overlay switch (Display tab) ----
+# ---- LOCAL PATCH: mod switches (Display tab) ----
 _i = template.index('V-Sync</label>') + len('V-Sync</label>')
-template = template[:_i] + ('\n          <label class="chk" title="Also F2 in game"><input type="checkbox" checked="{{ovl}}" sc-camel-on-change="{{toggleOvl}}">'
-                            + CHK + 'Performance Overlay (F2)</label>'
-                            + '\n          <label class="chk" title="Also F3 in game"><input type="checkbox" checked="{{cam}}" sc-camel-on-change="{{toggleCam}}">'
+template = template[:_i] + ('\n          <label class="chk" title="Also F3 in game"><input type="checkbox" checked="{{cam}}" sc-camel-on-change="{{toggleCam}}">'
                             + CHK + 'Close-Up Camera (F3)</label>'
                             + '\n          <label class="chk" title="Also F5 in game"><input type="checkbox" checked="{{hud}}" sc-camel-on-change="{{toggleHud}}">'
-                            + CHK + 'Hide HUD (F5)</label>'
-                            + '\n          <label class="chk" title="On a 120 Hz+ screen: smoother motion, about 16 ms more delay. Also F6 in game"><input type="checkbox" checked="{{fg}}" sc-camel-on-change="{{toggleFg}}">'
-                            + CHK + 'Frame Generation (F6)</label>'
-                            + '\n          <label class="chk" title="Removes the 16-33 ms the graphics driver adds by queueing frames (like NVIDIA Reflex). Also Shift+F6 in game"><input type="checkbox" checked="{{lowlat}}" sc-camel-on-change="{{toggleLowlat}}">'
-                            + CHK + 'Low Latency (Shift+F6)</label>') + template[_i:]
+                            + CHK + 'Hide HUD (F5)</label>') + template[_i:]
+
+# ---- LOCAL PATCH: the Performance tab (frame generation, its target, low latency, the overlay) ----
+template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
+    '        </sc-if>\n'
+    '        <sc-if value="{{tabPerf}}" hint-placeholder-val="{{false}}">\n' +
+    _chkrow('Frame Generation (F4)', 'fg', 'toggleFg', 'In-between pictures on a 120 Hz+ screen: much smoother motion, about 16 ms more delay.') +
+    _segrow('Frame Generation Target', 'fgtOpts', 6, 'Pictures a second with frame generation. Monitor = just under your screen&#39;s refresh.') +
+    _chkrow('Low Latency (F6)', 'lowlat', 'toggleLowlat', 'Stops the graphics driver queueing frames: 16-33 ms less delay, like NVIDIA Reflex.') +
+    _chkrow('Performance Overlay (F2)', 'ovl', 'toggleOvl', 'FPS, frame time, 1% lows, CPU, GPU, RAM and VRAM in the top-left corner.') +
+    '        </sc-if>\n        <sc-if value="{{tabController}}"')
 
 # ---- LOCAL PATCH: invert camera switches in Configure Controller (Gamepad view) ----
 template = must_replace(template, '              <p class="note">{{bindNote}}</p>',
@@ -1455,12 +1459,14 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0);""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
-  """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['controller', 'Controller']]""")
+  """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'Performance'], ['controller', 'Controller']]""")
 L("""      tabController: s.tab === 'controller',""",
   """      tabController: s.tab === 'controller',
       tabEffects: s.tab === 'effects',
+      tabPerf: s.tab === 'perf',
+      fgtOpts: [['monitor', 'Monitor'], ['120', '120'], ['144', '144'], ['240', '240'], ['360', '360'], ['unlimited', 'Max']].map((o) => ({ name: o[1], on: (s.fgt || 'monitor') === o[0], cls: (s.fgt || 'monitor') === o[0] ? 'on' : '', pick: () => this.setState({ fgt: o[0] }) })),
       blendOpts: [['minimum', 'Min'], ['basic', 'Basic'], ['medium', 'Medium'], ['high', 'High']].map((o) => ({ name: o[1], on: (s.blend || 'basic') === o[0], cls: (s.blend || 'basic') === o[0] ? 'on' : '', pick: () => this.setState({ blend: o[0] }) })),
       texfOpts: [['ps2', 'As on PS2'], ['bilinear', 'Bilinear']].map((o) => ({ name: o[1], on: (s.texf || 'ps2') === o[0], cls: (s.texf || 'ps2') === o[0] ? 'on' : '', pick: () => this.setState({ texf: o[0] }) })),
       scrfOpts: [['sharp', 'Sharp'], ['smooth', 'Smooth'], ['scanlines', 'Scanlines'], ['crt', 'CRT']].map((o) => ({ name: o[1], on: (s.scrf || 'smooth') === o[0], cls: (s.scrf || 'smooth') === o[0] ? 'on' : '', pick: () => this.setState({ scrf: o[0] }) })),
@@ -1490,7 +1496,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, fg: !!s.fg, lowlat: !!s.lowlat, mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);

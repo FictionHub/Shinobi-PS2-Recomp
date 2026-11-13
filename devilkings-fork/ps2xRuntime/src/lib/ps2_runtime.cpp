@@ -4469,6 +4469,41 @@ void PS2Runtime::run()
                 UnloadImage(small);
             }
         }
+        // LOCAL PATCH: the window loop's cap. With frame generation it sets how many pictures a second are shown
+        // ([video] framegen_target: monitor = 3 under the screen's refresh, as G-Sync / FreeSync like it, or 120 / 144 /
+        // 240 / 360, or unlimited); without it the loop just follows vsync (480 only stops a driver that ignores it).
+        {
+            static uint64_t s_capVersion = ~0ull;
+            static int s_capMonitor = -1;
+            static int s_cap = -1;
+            static bool s_fg = false;
+            static std::string s_target;
+            if (const uint64_t v = ps2x::settings::version(); v != s_capVersion)
+            {
+                s_capVersion = v;
+                s_fg = ps2x::settings::getBool("video", "frame_generation");
+                s_target = ps2x::settings::get("video", "framegen_target");
+            }
+            const int monitorHz = GetMonitorRefreshRate(GetCurrentMonitor());
+            int cap = 480;
+            if (std::getenv("PS2X_HOST_FPS60"))
+                cap = 60;
+            else if (s_fg)
+            {
+                if (s_target == "unlimited")
+                    cap = 0;
+                else if (s_target == "monitor" || s_target.empty())
+                    cap = monitorHz >= 60 ? monitorHz - 3 : 480;
+                else
+                    cap = std::clamp(std::atoi(s_target.c_str()), 60, 1000);
+            }
+            if (cap != s_cap || monitorHz != s_capMonitor)
+            {
+                SetTargetFPS(cap);
+                s_cap = cap;
+                s_capMonitor = monitorHz;
+            }
+        }
         // LOCAL PATCH: frame generation: on a 90 Hz+ screen, the in-between picture for this moment (ps2_framegen.cpp).
         const Texture2D shownTex = ps2x::framegen::present(frameTex, presentWidth, presentHeight);
         BeginDrawing();
@@ -4541,16 +4576,16 @@ void PS2Runtime::run()
             ps2x::settings::save();
             ps2xHotkeyToast("Close-up camera", on);
         }
-        // LOCAL PATCH: Shift+F6 switches low latency (saved).
-        if (IsKeyPressed(KEY_F6) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        // LOCAL PATCH: F6 switches low latency (saved).
+        if (IsKeyPressed(KEY_F6))
         {
             const bool on = !ps2x::settings::getBool("video", "low_latency");
             ps2x::settings::set("video", "low_latency", on ? "true" : "false");
             ps2x::settings::save();
             ps2xHotkeyToast("Low latency", on);
         }
-        // LOCAL PATCH: F6 switches frame generation (ps2_framegen.cpp; saved).
-        else if (IsKeyPressed(KEY_F6))
+        // LOCAL PATCH: F4 switches frame generation (ps2_framegen.cpp; saved). Not Alt+F4 (that closes the window).
+        if (IsKeyPressed(KEY_F4) && !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
         {
             const bool on = !ps2x::settings::getBool("video", "frame_generation");
             ps2x::settings::set("video", "frame_generation", on ? "true" : "false");
@@ -4608,9 +4643,8 @@ void PS2Runtime::run()
             }
             else if (combo && !ps2x::ingame::isOpen())
                 ps2x::ingame::open(hwnd);
-            // LOCAL PATCH: F4: the game manual (slides up; F4 again slides it down and the game resumes).
-            if (IsKeyPressed(KEY_F4) && !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
-                ps2x::ingame::toggleManual(hwnd);
+            // (F4 used to open the game manual here; it is frame generation now. The manual is in the launcher and the
+            // F1 menu.)
             // LOCAL PATCH: mouse camera. While the window has the focus and the F1 menu is shut, the pointer is captured and
             // its movement becomes the pad's right stick (Pad.cpp adds it to I J K L). F10 switches it on and off; the
             // [input] mouse_look and mouse_sensitivity settings are the defaults.

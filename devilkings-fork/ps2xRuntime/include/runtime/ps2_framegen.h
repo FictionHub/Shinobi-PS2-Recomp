@@ -2,7 +2,7 @@
 // LOCAL PATCH: frame generation. The game draws 60 pictures a second; on a 120 / 144 / 240 Hz screen the window shows
 // in-between pictures made on the graphics card from the last two real ones (motion estimated between them, both moved
 // part of the way along it and blended), so motion looks as smooth as the screen allows. Shown one game frame late
-// (about 16 ms), as every frame-generation method is. [video] frame_generation (F6 in game).
+// (about 16 ms), as every frame-generation method is. [video] frame_generation (F4 in game).
 #include <cstdint>
 
 #include "raylib.h"
