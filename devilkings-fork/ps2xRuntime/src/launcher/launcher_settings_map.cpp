@@ -101,6 +101,7 @@ namespace launcher
            << ",cam:" << b(truthy(get("game", "close_camera", "false")))
            << ",hud:" << b(truthy(get("game", "hide_hud", "false")))
            << ",bars:" << b(truthy(get("game", "hide_cinema_bars", "false")))
+           << ",scol:" << b(truthy(get("game", "scarf_collision", "true")))
            << ",fg:" << b(truthy(get("video", "frame_generation", "false")))
            << ",lowlat:" << b(truthy(get("video", "low_latency", "false")))
            << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
@@ -184,6 +185,7 @@ namespace launcher
             set("game", "close_camera", b(get("cam", "0") == "1"));
             set("game", "hide_hud", b(get("hud", "0") == "1"));
             set("game", "hide_cinema_bars", b(get("bars", "0") == "1"));
+            set("game", "scarf_collision", b(get("scol", "1") == "1"));
             set("video", "frame_generation", b(get("fg", "0") == "1"));
             set("video", "low_latency", b(get("lowlat", "0") == "1"));
             {

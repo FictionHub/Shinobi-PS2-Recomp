@@ -144,3 +144,23 @@ if 'ps2xCinemaBarsHidden' not in t:
         t = t[:k] + 'bool ps2xCinemaBarsHidden(); // ps2_hud_mod.cpp (LOCAL PATCH: cinematic bars mod)\n' + t[k:]
         write(path, t, nl)
 print('cinematic bar draws made optional:', bars, '(0 = already done)')
+
+# ---- 4. Scarf body collision: after CPlayerMuffler::Main's own update (just before its call to ResetWind at 0x2b8df0),
+# ps2xScarfCollide (ps2_scarf_collide.cpp) with the scarf object ($fp).
+path = os.path.join(D, 'Main__14CPlayerMufflerFv_0x2b8a50.cpp')
+raw = read(path)
+nl = '\r\n' if '\r\n' in raw else '\n'
+t = raw.replace('\r\n', '\n')
+done = 0
+if 'ps2xScarfCollide' not in t:
+    old = 'label_2b8df0:\n'
+    if t.count(old) == 1:
+        t = t.replace(old, old + '''    // LOCAL PATCH (mod): the scarf slides around the body instead of through it (ps2_scarf_collide.cpp).
+    {
+        extern void ps2xScarfCollide(uint8_t *rdram, uint32_t muffler);
+        ps2xScarfCollide(rdram, GPR_U32(ctx, 30));
+    }
+''')
+        write(path, t, nl)
+        done = 1
+print('scarf collision hook added:', done, '(0 = already done)')

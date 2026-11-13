@@ -444,6 +444,7 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
     _chkrow('Dithering', 'dith', 'toggleDith', 'The PS2&#39;s grainy colour pattern. Untick for smooth, clean gradients.') +
     _chkrow('Mipmapping', 'mip', 'toggleMip', 'Less shimmer on distant floors and walls. Applies after a restart.') +
     _chkrow('Upscaling Fixes', 'upfix', 'toggleUpfix', 'Removes seams and thin lines at high resolutions. Applies after a restart.') +
+    _chkrow('Scarf Body Collision', 'scol', 'toggleScol', 'The scarf keeps its float and trail but no longer passes through Hotsuma.') +
     '        </sc-if>\n        <sc-if value="{{tabController}}"')
 
 # ---- LOCAL PATCH: mod switches (Display tab) ----
@@ -1463,7 +1464,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1488,6 +1489,8 @@ L("""      tabController: s.tab === 'controller',""",
       toggleHud: () => this.setState({ hud: !this.state.hud }),
       bars: !!s.bars,
       toggleBars: () => this.setState({ bars: !this.state.bars }),
+      scol: s.scol !== false,
+      toggleScol: () => this.setState({ scol: !(this.state.scol !== false) }),
       fg: !!s.fg,
       toggleFg: () => this.setState({ fg: !this.state.fg }),
       lowlat: !!s.lowlat,
@@ -1502,7 +1505,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);

@@ -570,6 +570,10 @@ namespace ps2x::settings
                  "On a 120 Hz or faster screen, adds in-between pictures made from the game's own, so motion is as smooth "
                  "as the screen. Adds about one frame (16 ms) of delay. F4 switches it while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): the scarf slides around Hotsuma's body instead of through it (ps2_scarf_collide.cpp).
+            add({"game", "scarf_collision", "Scarf body collision",
+                 "The scarf keeps its float and trail but no longer passes through Hotsuma's body.",
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): no black bars in the game's cinematics (ps2_hud_mod.cpp). Shift+F5 in game.
             add({"game", "hide_cinema_bars", "Hide cinematic bars",
                  "Removes the black bands at the top and bottom of the game's cinematic moments (the TATE kill camera, "
