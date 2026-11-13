@@ -4120,6 +4120,13 @@ void main()
             DrawTexturePro(frameTex, src, dst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
         }
 
+        // Frame generation statistics (shown pictures).
+        bool fgWas = false;
+        std::vector<float> fgGaps;
+        size_t fgNext = 0;
+        uint64_t fgCount0 = 0;
+        double fgTime0 = 0.0, fgLast = 0.0;
+
         // Game frames per second (display swaps), not the 60 Hz of the window.
         void drawFps(const Rectangle &picture)
         {
@@ -4176,8 +4183,57 @@ void main()
                 ramGb = ram;
                 vramGb = vram;
             }
-            const double avg = (avgFrames0 != 0 && now > avgTime0 + 1.0) ? static_cast<double>(frames - avgFrames0) / (now - avgTime0) : 0.0;
+            double avg = (avgFrames0 != 0 && now > avgTime0 + 1.0) ? static_cast<double>(frames - avgFrames0) / (now - avgTime0) : 0.0;
             float low = 0.0f;
+            // LOCAL PATCH: with frame generation the overlay measures the pictures the screen really shows (one per window
+            // frame), not the game's 60: FPS, frame time, AVG and 1% LOW are those, and GAME is the game's own rate.
+            const bool fgOn = ps2x::framegen::shownPerSecond() > 0.5f;
+            if (fgOn != fgWas)
+            {
+                fgWas = fgOn;
+                fgGaps.clear();
+                fgNext = 0;
+                fgCount0 = 0;
+                fgLast = 0.0;
+            }
+            float shownFps = 0.0f, shownMs = 0.0f, shownLow = 0.0f;
+            double shownAvg = 0.0;
+            if (fgOn)
+            {
+                if (fgLast > 0.0)
+                {
+                    const float gap = static_cast<float>((now - fgLast) * 1000.0);
+                    if (gap < 250.0f)
+                    {
+                        if (fgGaps.size() < 3600)
+                            fgGaps.push_back(gap);
+                        else
+                            fgGaps[fgNext++ % 3600] = gap;
+                    }
+                }
+                fgLast = now;
+                if (fgCount0 == 0)
+                {
+                    fgTime0 = now;
+                    fgCount0 = 1;
+                }
+                else
+                    ++fgCount0;
+                shownFps = ps2x::framegen::shownPerSecond();
+                shownMs = shownFps > 0.5f ? 1000.0f / shownFps : 0.0f;
+                if (now > fgTime0 + 1.0)
+                    shownAvg = static_cast<double>(fgCount0 - 1) / (now - fgTime0);
+                if (fgGaps.size() >= 300)
+                {
+                    std::vector<float> sorted(fgGaps);
+                    std::sort(sorted.begin(), sorted.end(), std::greater<float>());
+                    const size_t worst = std::max<size_t>(1, sorted.size() / 100);
+                    float sum = 0.0f;
+                    for (size_t i = 0; i < worst; ++i)
+                        sum += sorted[i];
+                    shownLow = 1000.0f / (sum / static_cast<float>(worst));
+                }
+            }
             if (gaps.size() >= 60)
             {
                 std::vector<float> sorted(gaps);
@@ -4221,12 +4277,16 @@ void main()
                 const auto pct = [](int v) { return v >= 0 ? std::to_string(v) + "%" : std::string("--"); };
                 char l1[64], l2[64], l3[64], l4[64];
                 std::snprintf(l1, sizeof(l1), "FPS %.0f   %.1f ms", fps, fps > 0.5f ? 1000.0f / fps : 0.0f);
-                // With frame generation: the pictures the screen really shows a second (game + generated).
-                if (const float shown = ps2x::framegen::shownPerSecond(); shown > 0.5f)
-                    std::snprintf(l1, sizeof(l1), "FPS %.0f > %.0f FG   %.1f ms", fps, shown, fps > 0.5f ? 1000.0f / fps : 0.0f);
                 std::snprintf(l2, sizeof(l2), "AVG %s   1%% LOW %s",
                               avg > 0.0 ? std::to_string(static_cast<int>(avg + 0.5)).c_str() : "--",
                               low > 0.0f ? std::to_string(static_cast<int>(low + 0.5f)).c_str() : "--");
+                if (fgOn)
+                {
+                    std::snprintf(l1, sizeof(l1), "FPS %.0f   GAME %.0f   %.1f ms", shownFps, fps, shownMs);
+                    std::snprintf(l2, sizeof(l2), "AVG %s   1%% LOW %s   FG",
+                                  shownAvg > 0.0 ? std::to_string(static_cast<int>(shownAvg + 0.5)).c_str() : "--",
+                                  shownLow > 0.0f ? std::to_string(static_cast<int>(shownLow + 0.5f)).c_str() : "--");
+                }
                 std::snprintf(l3, sizeof(l3), "CPU %s   GPU %s", pct(cpuPercent).c_str(), pct(gpuPercent).c_str());
                 std::snprintf(l4, sizeof(l4), "RAM %s   VRAM %s", gb(ramGb).c_str(), gb(vramGb).c_str());
                 const char *lines[] = {l1, l2, l3, l4};
