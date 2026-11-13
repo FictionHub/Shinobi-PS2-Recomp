@@ -154,40 +154,100 @@ void main()
 }
 )";
 
+    // The motion of whatever is at each spot half way between A and B. Nearby estimates of both directions are tried
+    // (both layers where a character and the background move differently); each moves A and B to that moment, and the
+    // one that makes them show the same thing wins. A wrong layer's motion never matches, so it never makes a ghost.
+    const char *kPack = R"(#version 330
+out vec4 finalColor;
+uniform sampler2D ba;
+uniform sampler2D ab;
+uniform vec2 outSize;
+void main() { vec2 q = gl_FragCoord.xy / outSize; finalColor = vec4(texture(ba, q).xy, texture(ab, q).xy); }
+)";
+
+    const char *kMid = R"(#version 330
+out vec4 finalColor;
+uniform sampler2D frameA;
+uniform sampler2D frameB;
+uniform sampler2D flowBoth; // xy: B pixel -> where it was in A, zw: A pixel -> where it went in B (full-size pixels)
+uniform vec2 outSize;     // this pass (half size)
+uniform vec2 fullSize;
+float score(vec2 q, vec2 v)
+{
+    vec2 px = 1.0 / fullSize;
+    vec2 h = 0.5 * v * px;
+    float s = 0.0;
+    vec2 o[3] = vec2[3](vec2(0.0), vec2(2.0, 0.0), vec2(0.0, 2.0));
+    for (int k = 0; k < 3; ++k)
+    {
+        vec2 p = q + o[k] * px;
+        vec3 d = abs(texture(frameA, p + h).rgb - texture(frameB, p - h).rgb);
+        s += d.r + d.g + d.b;
+    }
+    return s;
+}
+void main()
+{
+    vec2 q = gl_FragCoord.xy / outSize;
+    vec2 px = 1.0 / fullSize;
+    vec2 best = texture(flowBoth, q).xy;
+    float bestScore = score(q, best);
+    vec2 c = -texture(flowBoth, q).zw;
+    float sc = score(q, c);
+    if (sc < bestScore) { bestScore = sc; best = c; }
+    const float R = 12.0;
+    vec2 dirs[8] = vec2[8](vec2(R, 0.0), vec2(-R, 0.0), vec2(0.0, R), vec2(0.0, -R),
+                           vec2(R, R), vec2(-R, R), vec2(R, -R), vec2(-R, -R));
+    for (int k = 0; k < 8; ++k)
+    {
+        vec2 n = q + dirs[k] * px;
+        c = texture(flowBoth, n).xy;
+        sc = score(q, c) + 0.02;   // a neighbour's motion must do clearly better than this spot's own
+        if (sc < bestScore) { bestScore = sc; best = c; }
+        c = -texture(flowBoth, n).zw;
+        sc = score(q, c) + 0.02;
+        if (sc < bestScore) { bestScore = sc; best = c; }
+    }
+    finalColor = vec4(best, bestScore, 1.0);
+}
+)";
+
     const char *kInterp = R"(#version 330
 out vec4 finalColor;
 uniform sampler2D frameA;
 uniform sampler2D frameB;
-uniform sampler2D flowBA; // B pixel -> where it was in A (full-size pixels)
-uniform sampler2D flowAB; // A pixel -> where it went in B
+uniform sampler2D flowMid; // the motion of what is at each spot half way (full-size pixels, B -> A)
+uniform sampler2D flowBoth; // xy: B -> A, zw: A -> B
 uniform vec2 outSize;
-uniform float t;          // 0 = A, 1 = B
-vec2 F(vec2 uv) { return texture(flowBA, uv).xy / outSize; }
-vec2 G(vec2 uv) { return texture(flowAB, uv).xy / outSize; }
+uniform float t;           // 0 = A, 1 = B
 void main()
 {
     vec2 q = gl_FragCoord.xy / outSize;
-    // The B pixel that is at q at time t: pB + (1 - t) * F(pB) = q. A few fixed-point steps find it.
-    vec2 vb = F(q);
-    for (int i = 0; i < 3; ++i) vb = F(q - (1.0 - t) * vb);
-    vec2 pB = q - (1.0 - t) * vb;
-    // The A pixel that is at q at time t: pA + t * G(pA) = q.
-    vec2 va = G(q);
-    for (int i = 0; i < 3; ++i) va = G(q - t * va);
-    vec2 pA = q - t * va;
+    vec2 px = 1.0 / outSize;
+    vec2 v = texture(flowMid, q).xy;
+    vec2 pA = q + t * v * px;
+    vec2 pB = q - (1.0 - t) * v * px;
     vec3 a = texture(frameA, pA).rgb;
     vec3 b = texture(frameB, pB).rgb;
-    // Each is trusted when the other direction agrees: going there and back lands where it started. A pixel that is
-    // covered in the other picture (or a wrong vector) fails that, and the other picture is used for it.
-    float eb = length((vb + G(pB + vb)) * outSize);
-    float ea = length((va + F(pA + va)) * outSize);
-    float wb = t * exp(-eb * eb / 18.0) + 1e-4;
-    float wa = (1.0 - t) * exp(-ea * ea / 18.0) + 1e-4;
-    vec3 c = (a * wa + b * wb) / (wa + wb);
-    // Neither trustworthy: the nearer real picture, along its own motion.
-    float either = max(exp(-ea * ea / 18.0), exp(-eb * eb / 18.0));
-    vec3 near = t < 0.5 ? a : b;
-    finalColor = vec4(mix(near, c, clamp(either * 4.0, 0.0, 1.0)), 1.0);
+    vec3 blend = mix(a, b, t);
+    float diff = length(a - b);
+    if (diff < 0.08)
+    {
+        finalColor = vec4(blend, 1.0);
+        return;
+    }
+    // A and B disagree: the spot is visible in only one of them (just uncovered, or about to be covered). Each side is
+    // kept only if the pixel it samples really moves with this motion.
+    float okB = exp(-pow(length(texture(flowBoth, pB).xy - v), 2.0) / 8.0);
+    float okA = exp(-pow(length(-texture(flowBoth, pA).zw - v), 2.0) / 8.0);
+    vec3 c;
+    if (okA > 0.5 && okB < 0.5)
+        c = a;
+    else if (okB > 0.5 && okA < 0.5)
+        c = b;
+    else
+        c = t < 0.5 ? a : b; // both or neither: the nearer real picture, never a double image
+    finalColor = vec4(mix(c, blend, clamp(1.0 - (diff - 0.08) * 6.0, 0.0, 1.0)), 1.0);
 }
 )";
 
@@ -202,7 +262,7 @@ void main()
     {
         bool tried = false;
         bool ok = false;
-        Shader copy{}, luma{}, search{}, median{}, interp{};
+        Shader copy{}, luma{}, search{}, median{}, interp{}, mid{}, pack{};
         int w = 0, h = 0;
         Frame frames[2];
         int a = 0, b = 1;             // which of frames[] is A (older) and B (newer)
@@ -210,6 +270,8 @@ void main()
         RenderTexture2D flowRefine{}; // the finest level again, in 1-pixel steps
         RenderTexture2D flowSmooth{};   // B -> A
         RenderTexture2D flowSmoothAB{}; // A -> B
+        RenderTexture2D flowMid{};      // what is at each spot half way
+        RenderTexture2D flowBoth{};     // both motions in one texture (raylib binds at most 4 per pass)
         RenderTexture2D out{};
         bool haveA = false, haveB = false;
         double timeA = 0.0, timeB = 0.0;
@@ -289,6 +351,8 @@ void main()
         freeTarget(s.flowRefine);
         freeTarget(s.flowSmooth);
         freeTarget(s.flowSmoothAB);
+        freeTarget(s.flowMid);
+        freeTarget(s.flowBoth);
         freeTarget(s.out);
         s.w = s.h = 0;
         s.haveA = s.haveB = false;
@@ -314,10 +378,12 @@ void main()
             good = good && s.flow[l].id;
         }
         s.flowRefine = makeTarget(levelSize(w, kFinestFlow), levelSize(h, kFinestFlow), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-        s.flowSmooth = makeTarget(levelSize(w, kFinestFlow), levelSize(h, kFinestFlow), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
-        s.flowSmoothAB = makeTarget(levelSize(w, kFinestFlow), levelSize(h, kFinestFlow), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+        s.flowSmooth = makeTarget(levelSize(w, 1), levelSize(h, 1), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+        s.flowSmoothAB = makeTarget(levelSize(w, 1), levelSize(h, 1), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+        s.flowMid = makeTarget(levelSize(w, 1), levelSize(h, 1), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
+        s.flowBoth = makeTarget(levelSize(w, 1), levelSize(h, 1), PIXELFORMAT_UNCOMPRESSED_R16G16B16A16);
         s.out = makeTarget(w, h, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-        good = good && s.flowRefine.id && s.flowSmooth.id && s.flowSmoothAB.id && s.out.id;
+        good = good && s.flowRefine.id && s.flowSmooth.id && s.flowSmoothAB.id && s.flowMid.id && s.flowBoth.id && s.out.id;
         if (!good)
         {
             std::fprintf(stderr, "[framegen] could not create the graphics buffers (%dx%d): frame generation stays off\n", w, h);
@@ -354,9 +420,15 @@ void main()
     {
         BeginTextureMode(target);
         BeginShaderMode(sh);
+        // No blending: some passes keep data (not opacity) in the alpha channel. (Inputs are set after this flush,
+        // which would otherwise unbind them.)
+        rlDrawRenderBatchActive();
+        rlDisableColorBlend();
         setVec2(sh, "outSize", static_cast<float>(target.texture.width), static_cast<float>(target.texture.height));
         setup();
         DrawRectangle(0, 0, target.texture.width, target.texture.height, WHITE);
+        rlDrawRenderBatchActive();
+        rlEnableColorBlend();
         EndShaderMode();
         EndTextureMode();
     }
@@ -368,8 +440,10 @@ void main()
         s.search = LoadShaderFromMemory(nullptr, kSearch);
         s.median = LoadShaderFromMemory(nullptr, kMedian);
         s.interp = LoadShaderFromMemory(nullptr, kInterp);
+        s.mid = LoadShaderFromMemory(nullptr, kMid);
+        s.pack = LoadShaderFromMemory(nullptr, kPack);
         const bool good = IsShaderValid(s.copy) && IsShaderValid(s.luma) && IsShaderValid(s.search) &&
-                          IsShaderValid(s.median) && IsShaderValid(s.interp);
+                          IsShaderValid(s.median) && IsShaderValid(s.interp) && IsShaderValid(s.mid) && IsShaderValid(s.pack);
         if (!good)
             std::fprintf(stderr, "[framegen] shaders unavailable on this graphics driver: frame generation stays off\n");
         return good;
@@ -425,10 +499,31 @@ void main()
                 setFloat(s.search, "levelScale", 1.0f);
                 setVec2(s.search, "fullSize", static_cast<float>(s.w), static_cast<float>(s.h));
             });
-            pass(result, s.median, [&] { setTex(s.median, "flow", s.flowRefine.texture); });
+            // Median (removes stray vectors), then one more 1-pixel search at half size from it: motion edges then
+            // follow object outlines at half-size detail instead of quarter-size blocks.
+            pass(s.flow[l], s.median, [&] { setTex(s.median, "flow", s.flowRefine.texture); });
+            pass(result, s.search, [&] {
+                setTex(s.search, "lumaA", from.luma[1].texture);
+                setTex(s.search, "lumaB", to.luma[1].texture);
+                setTex(s.search, "coarse", s.flow[l].texture);
+                setInt(s.search, "hasCoarse", 1);
+                setInt(s.search, "radius", 1);
+                setFloat(s.search, "levelScale", 1.0f);
+                setVec2(s.search, "fullSize", static_cast<float>(s.w), static_cast<float>(s.h));
+            });
         };
         motion(fa, fb, s.flowSmooth);   // B -> A
         motion(fb, fa, s.flowSmoothAB); // A -> B
+        pass(s.flowBoth, s.pack, [&] {
+            setTex(s.pack, "ba", s.flowSmooth.texture);
+            setTex(s.pack, "ab", s.flowSmoothAB.texture);
+        });
+        pass(s.flowMid, s.mid, [&] {
+            setTex(s.mid, "frameA", fa.colour.texture);
+            setTex(s.mid, "frameB", fb.colour.texture);
+            setTex(s.mid, "flowBoth", s.flowBoth.texture);
+            setVec2(s.mid, "fullSize", static_cast<float>(s.w), static_cast<float>(s.h));
+        });
     }
 }
 
@@ -527,7 +622,10 @@ namespace ps2x::framegen
         // A gap of more than 1/20 s (a load, a pause) is not motion to smooth.
         if (!s.pairUsable || period <= 0.004 || period > 0.05)
             return b;
-        const double t = (now - s.timeB) / period;
+        double t = (now - s.timeB) / period;
+        // Testing: PS2X_FRAMEGEN_T=<0..1> fixes the moment shown (scripts/tests/fgtest.cpp).
+        if (static const char *s_t = std::getenv("PS2X_FRAMEGEN_T"); s_t && s_t[0])
+            t = std::atof(s_t);
         if (t >= 1.0)
             return b; // the next picture is late: hold the newest
         if (t <= 0.02)
@@ -535,8 +633,8 @@ namespace ps2x::framegen
         pass(s.out, s.interp, [&] {
             setTex(s.interp, "frameA", a);
             setTex(s.interp, "frameB", b);
-            setTex(s.interp, "flowBA", s.flowSmooth.texture);
-            setTex(s.interp, "flowAB", s.flowSmoothAB.texture);
+            setTex(s.interp, "flowMid", s.flowMid.texture);
+            setTex(s.interp, "flowBoth", s.flowBoth.texture);
             setFloat(s.interp, "t", static_cast<float>(t));
         });
         s.activeNow = true;
