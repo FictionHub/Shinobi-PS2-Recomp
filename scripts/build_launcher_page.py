@@ -451,7 +451,9 @@ _i = template.index('V-Sync</label>') + len('V-Sync</label>')
 template = template[:_i] + ('\n          <label class="chk" title="Also F3 in game"><input type="checkbox" checked="{{cam}}" sc-camel-on-change="{{toggleCam}}">'
                             + CHK + 'Close-Up Camera (F3)</label>'
                             + '\n          <label class="chk" title="Also F5 in game"><input type="checkbox" checked="{{hud}}" sc-camel-on-change="{{toggleHud}}">'
-                            + CHK + 'Hide HUD (F5)</label>') + template[_i:]
+                            + CHK + 'Hide HUD (F5)</label>'
+                            + '\n          <label class="chk" title="No black bars in the TATE kill camera and the game&#39;s own scenes. Also Shift+F5 in game"><input type="checkbox" checked="{{bars}}" sc-camel-on-change="{{toggleBars}}">'
+                            + CHK + 'Hide Cinematic Bars (Shift+F5)</label>') + template[_i:]
 
 # ---- LOCAL PATCH: the Performance tab (frame generation, its target, low latency, the overlay) ----
 template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
@@ -1459,7 +1461,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1482,6 +1484,8 @@ L("""      tabController: s.tab === 'controller',""",
       toggleCam: () => this.setState({ cam: !this.state.cam }),
       hud: !!s.hud,
       toggleHud: () => this.setState({ hud: !this.state.hud }),
+      bars: !!s.bars,
+      toggleBars: () => this.setState({ bars: !this.state.bars }),
       fg: !!s.fg,
       toggleFg: () => this.setState({ fg: !this.state.fg }),
       lowlat: !!s.lowlat,
@@ -1496,7 +1500,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);

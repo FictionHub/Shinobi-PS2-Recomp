@@ -756,6 +756,50 @@ static std::string g_toastName;
 static bool g_toastOn = false;
 static double g_toastStart = -100.0;
 
+// LOCAL PATCH: the text of the performance overlay and the hotkey notices in a proper typeface instead of raylib's pixel
+// font: Bahnschrift (the font of Windows' own performance widgets), else Segoe UI Semibold, else the built-in one. Loaded
+// once, large, and drawn smaller with smoothing, so it stays crisp at any window size.
+static Font &ps2xUiFont()
+{
+    static Font s_font{};
+    static bool s_tried = false;
+    if (!s_tried)
+    {
+        s_tried = true;
+        s_font = GetFontDefault();
+#if defined(_WIN32)
+        const char *windir = std::getenv("WINDIR");
+        const std::string fonts = std::string(windir ? windir : "C:\\Windows") + "\\Fonts\\";
+        for (const char *name : {"bahnschrift.ttf", "seguisb.ttf", "segoeuib.ttf", "segoeui.ttf"})
+        {
+            const std::string path = fonts + name;
+            if (!FileExists(path.c_str()))
+                continue;
+            Font f = LoadFontEx(path.c_str(), 96, nullptr, 0);
+            if (f.texture.id != 0 && f.glyphCount > 0)
+            {
+                GenTextureMipmaps(&f.texture);
+                SetTextureFilter(f.texture, TEXTURE_FILTER_TRILINEAR);
+                s_font = f;
+                break;
+            }
+        }
+#endif
+    }
+    return s_font;
+}
+
+static int ps2xUiTextWidth(const char *text, int size)
+{
+    return static_cast<int>(MeasureTextEx(ps2xUiFont(), text, static_cast<float>(size), size / 20.0f).x + 0.5f);
+}
+
+static void ps2xUiText(const char *text, int x, int y, int size, Color colour)
+{
+    DrawTextEx(ps2xUiFont(), text, Vector2{static_cast<float>(x), static_cast<float>(y)}, static_cast<float>(size), size / 20.0f,
+               colour);
+}
+
 static void ps2xHotkeyToast(const char *name, bool on)
 {
     g_toastName = name;
@@ -784,7 +828,7 @@ static void ps2xDrawHotkeyToast()
     const int size = std::max(18, GetScreenHeight() / 48);
     const std::string state = g_toastOn ? "On" : "Off";
     const std::string text = g_toastName + ":  ";
-    const int textW = MeasureText(text.c_str(), size), stateW = MeasureText(state.c_str(), size);
+    const int textW = ps2xUiTextWidth(text.c_str(), size), stateW = ps2xUiTextWidth(state.c_str(), size);
     const int padX = size, padY = size * 2 / 3, bar = std::max(4, size / 5), margin = 16;
     const int w = bar + padX + textW + stateW + padX, h = size + 2 * padY;
     const int x = GetScreenWidth() - margin - w;
@@ -793,8 +837,8 @@ static void ps2xDrawHotkeyToast()
     DrawRectangleRounded(Rectangle{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)},
                          0.25f, 8, Color{12, 12, 16, 210});
     DrawRectangle(x, y + h / 5, bar, h - 2 * (h / 5), accent);
-    DrawText(text.c_str(), x + bar + padX, y + padY, size, Color{235, 235, 240, 255});
-    DrawText(state.c_str(), x + bar + padX + textW, y + padY, size, accent);
+    ps2xUiText(text.c_str(), x + bar + padX, y + padY, size, Color{235, 235, 240, 255});
+    ps2xUiText(state.c_str(), x + bar + padX + textW, y + padY, size, accent);
 }
 
 // LOCAL PATCH (DualSense): src/lib/ps2_dualsense.cpp (the same struct as in ps2_pad.cpp).
@@ -4294,14 +4338,14 @@ void main()
                 const int pad = size / 2, gap = size / 4, x = 12, y = 12;
                 int width = 0;
                 for (const char *l : lines)
-                    width = std::max(width, MeasureText(l, size));
+                    width = std::max(width, ps2xUiTextWidth(l, size));
                 const int height = 4 * size + 3 * gap;
                 DrawRectangleRounded(Rectangle{static_cast<float>(x), static_cast<float>(y), static_cast<float>(width + 2 * pad),
                                                static_cast<float>(height + 2 * pad)},
                                      0.18f, 6, Color{0, 0, 0, 90});
                 const Color green{60, 255, 110, 235};
                 for (int i = 0; i < 4; ++i)
-                    DrawText(lines[i], x + pad, y + pad + i * (size + gap), size, green);
+                    ps2xUiText(lines[i], x + pad, y + pad + i * (size + gap), size, green);
             }
         }
     };
@@ -4652,8 +4696,16 @@ void PS2Runtime::run()
             ps2x::settings::save();
             ps2xHotkeyToast(GetMonitorRefreshRate(GetCurrentMonitor()) < 90 && on ? "Frame generation (needs 90 Hz+)" : "Frame generation", on);
         }
+        // LOCAL PATCH (mod): Shift+F5 hides / shows the cinematic bars (ps2_hud_mod.cpp; saved).
+        if (IsKeyPressed(KEY_F5) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        {
+            const bool hidden = !ps2x::settings::getBool("game", "hide_cinema_bars");
+            ps2x::settings::set("game", "hide_cinema_bars", hidden ? "true" : "false");
+            ps2x::settings::save();
+            ps2xHotkeyToast("Cinematic bars", !hidden);
+        }
         // LOCAL PATCH (mod): F5 hides / shows the HUD (ps2_hud_mod.cpp; saved).
-        if (IsKeyPressed(KEY_F5))
+        else if (IsKeyPressed(KEY_F5))
         {
             const bool hidden = !ps2x::settings::getBool("game", "hide_hud");
             ps2x::settings::set("game", "hide_hud", hidden ? "true" : "false");

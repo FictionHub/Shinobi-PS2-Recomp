@@ -19,3 +19,19 @@ bool ps2xHudHidden()
     }
     return s_hidden.load(std::memory_order_relaxed);
 }
+
+// LOCAL PATCH (mod): no black bars in the game's own cinematics (EventAction::Draw, 0x307ec0: a 640x48 band at the top
+// and a 640x80 one at the bottom, e.g. the TATE kill camera). [game] hide_cinema_bars, Shift+F5 in game. Fades and the
+// movies' own borders are not touched.
+bool ps2xCinemaBarsHidden()
+{
+    static std::atomic<uint64_t> s_version{~0ull};
+    static std::atomic<bool> s_hidden{false};
+    const uint64_t version = ps2x::settings::version();
+    if (s_version.load(std::memory_order_relaxed) != version)
+    {
+        s_hidden.store(ps2x::settings::getBool("game", "hide_cinema_bars"), std::memory_order_relaxed);
+        s_version.store(version, std::memory_order_relaxed);
+    }
+    return s_hidden.load(std::memory_order_relaxed);
+}

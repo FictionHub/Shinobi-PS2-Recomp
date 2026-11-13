@@ -570,6 +570,11 @@ namespace ps2x::settings
                  "On a 120 Hz or faster screen, adds in-between pictures made from the game's own, so motion is as smooth "
                  "as the screen. Adds about one frame (16 ms) of delay. F4 switches it while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): no black bars in the game's cinematics (ps2_hud_mod.cpp). Shift+F5 in game.
+            add({"game", "hide_cinema_bars", "Hide cinematic bars",
+                 "Removes the black bands at the top and bottom of the game's cinematic moments (the TATE kill camera, "
+                 "scenes in the game's own graphics). Shift+F5 switches it while playing.",
+                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): hide the HUD (ps2_hud_mod.cpp). F5 in game.
             add({"game", "hide_hud", "Hide HUD",
                  "Hides health, kunai, magic, the TATE counter and boss gauges for a clean screen. F5 switches it while playing.",

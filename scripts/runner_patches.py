@@ -122,3 +122,25 @@ for name in HUD:
     write(path, t[:m.end()] + HOOK + t[m.end():], nl)
     hooked += 1
 print('HUD draw functions hooked:', hooked, 'of', len(HUD))
+
+# ---- 3. Cinematic bars mod: EventAction::Draw's two band draws (EasyDrawPol2DZ at 0x307f58 and 0x307f9c) skipped while
+# ps2xCinemaBarsHidden() (ps2_hud_mod.cpp). Skipping a call is the same as the call returning at once.
+path = os.path.join(D, 'Draw__11EventActionFv_0x307ec0.cpp')
+raw = read(path)
+nl = '\r\n' if '\r\n' in raw else '\n'
+t = raw.replace('\r\n', '\n')
+bars = 0
+if 'ps2xCinemaBarsHidden' not in t:
+    for site, ret in (('0x307F58u', '0x307F60u'), ('0x307F9Cu', '0x307FA4u')):
+        old = ('    if (!runtime->dispatchGuestBranch(rdram, ctx, 0x247740u, %s, %s, PS2Runtime::GuestBranchKind::DirectCall, "JAL")) {'
+               % (site, ret))
+        new = ('    if (!ps2xCinemaBarsHidden() && !runtime->dispatchGuestBranch(rdram, ctx, 0x247740u, %s, %s, '
+               'PS2Runtime::GuestBranchKind::DirectCall, "JAL")) {' % (site, ret))
+        if t.count(old) == 1:
+            t = t.replace(old, new)
+            bars += 1
+    if bars:
+        k = t.find('void Draw__11EventActionFv_0x307ec0(')
+        t = t[:k] + 'bool ps2xCinemaBarsHidden(); // ps2_hud_mod.cpp (LOCAL PATCH: cinematic bars mod)\n' + t[k:]
+        write(path, t, nl)
+print('cinematic bar draws made optional:', bars, '(0 = already done)')
