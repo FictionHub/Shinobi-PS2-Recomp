@@ -101,6 +101,7 @@ namespace launcher
            << ",cam:" << b(truthy(get("game", "close_camera", "false")))
            << ",hud:" << b(truthy(get("game", "hide_hud", "false")))
            << ",fg:" << b(truthy(get("video", "frame_generation", "false")))
+           << ",lowlat:" << b(truthy(get("video", "low_latency", "false")))
            << ",scarf:" << jsonString(scarfColour(get("game", "scarf_color", "original")))
            << ",win:" << jsonString(get("video", "window", "borderless"))
            << ",haptics:" << b(truthy(get("input", "haptics", "true")))
@@ -181,6 +182,7 @@ namespace launcher
             set("game", "close_camera", b(get("cam", "0") == "1"));
             set("game", "hide_hud", b(get("hud", "0") == "1"));
             set("video", "frame_generation", b(get("fg", "0") == "1"));
+            set("video", "low_latency", b(get("lowlat", "0") == "1"));
         }
         // LOCAL PATCH (mod): Hotsuma's scarf colour, "original" or #rrggbb.
         {

@@ -44,6 +44,9 @@
 #include <memory>
 
 void ps2xCriRnaMix(int16_t *out, size_t frames); // ps2_cri_rna.cpp (GitHub issue #2)
+#if defined(_WIN32)
+extern "C" __declspec(dllimport) void __stdcall glFinish(void); // opengl32 (OpenGL 1.1), already linked for raylib
+#endif
 
 namespace
 {
@@ -4508,6 +4511,23 @@ void PS2Runtime::run()
             m_debugUiDrawCallback(*this, m_debugUiUserData);
         }
         EndDrawing();
+        // LOCAL PATCH: low latency ([video] low_latency). Wait here until the graphics card has really shown this frame,
+        // so the driver never queues finished frames ahead of the screen (usually 1-2 frames, 16-33 ms, of delay): the
+        // same idea as NVIDIA Reflex, which does not exist for OpenGL. The game itself runs on other threads, so only
+        // the window loop waits.
+#if defined(_WIN32)
+        {
+            static uint64_t s_llVersion = ~0ull;
+            static bool s_lowLatency = false;
+            if (const uint64_t v = ps2x::settings::version(); v != s_llVersion)
+            {
+                s_llVersion = v;
+                s_lowLatency = ps2x::settings::getBool("video", "low_latency");
+            }
+            if (s_lowLatency)
+                glFinish();
+        }
+#endif
         PollMarkHotkey(m_eeScheduler ? m_eeScheduler->currentVSyncTick() : 0u);
         // LOCAL PATCH: Alt+Enter or F11 switches between the chosen full-screen mode (fullscreen / borderless) and a normal,
         // resizable window, at any time (presentation.apply does the switch next frame). In a window the usual minimise /

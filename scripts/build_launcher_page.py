@@ -455,7 +455,9 @@ template = template[:_i] + ('\n          <label class="chk" title="Also F2 in ga
                             + '\n          <label class="chk" title="Also F5 in game"><input type="checkbox" checked="{{hud}}" sc-camel-on-change="{{toggleHud}}">'
                             + CHK + 'Hide HUD (F5)</label>'
                             + '\n          <label class="chk" title="On a 120 Hz+ screen: smoother motion, about 16 ms more delay. Also F6 in game"><input type="checkbox" checked="{{fg}}" sc-camel-on-change="{{toggleFg}}">'
-                            + CHK + 'Frame Generation (F6)</label>') + template[_i:]
+                            + CHK + 'Frame Generation (F6)</label>'
+                            + '\n          <label class="chk" title="Removes the 16-33 ms the graphics driver adds by queueing frames (like NVIDIA Reflex)"><input type="checkbox" checked="{{lowlat}}" sc-camel-on-change="{{toggleLowlat}}">'
+                            + CHK + 'Low Latency</label>') + template[_i:]
 
 # ---- LOCAL PATCH: invert camera switches in Configure Controller (Gamepad view) ----
 template = must_replace(template, '              <p class="note">{{bindNote}}</p>',
@@ -1453,7 +1455,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('fg', s.fg ? 1 : 0);""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0);""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['controller', 'Controller']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1475,7 +1477,9 @@ L("""      tabController: s.tab === 'controller',""",
       hud: !!s.hud,
       toggleHud: () => this.setState({ hud: !this.state.hud }),
       fg: !!s.fg,
-      toggleFg: () => this.setState({ fg: !this.state.fg }),""")
+      toggleFg: () => this.setState({ fg: !this.state.fg }),
+      lowlat: !!s.lowlat,
+      toggleLowlat: () => this.setState({ lowlat: !this.state.lowlat }),""")
 
 # ---- LOCAL PATCH (GitHub issues #4 and #5): controller remapping and invert camera (Configure Controller, Gamepad) ----
 L("""      bind: Object.assign({}, this.defBinds, init ? init.binds : {}),""",
@@ -1486,7 +1490,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, fg: !!s.fg, mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, fg: !!s.fg, lowlat: !!s.lowlat, mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
