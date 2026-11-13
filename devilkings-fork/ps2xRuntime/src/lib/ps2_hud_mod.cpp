@@ -35,3 +35,18 @@ bool ps2xCinemaBarsHidden()
     }
     return s_hidden.load(std::memory_order_relaxed);
 }
+
+// LOCAL PATCH (mod): no scarf at all. CPlayerMuffler::Draw (0x2b8e60) returns straight away while [game] hide_scarf is
+// on (Mod Menu); its movement still runs, so it is back exactly in place when shown again.
+bool ps2xScarfHidden()
+{
+    static std::atomic<uint64_t> s_version{~0ull};
+    static std::atomic<bool> s_hidden{false};
+    const uint64_t version = ps2x::settings::version();
+    if (s_version.load(std::memory_order_relaxed) != version)
+    {
+        s_hidden.store(ps2x::settings::getBool("game", "hide_scarf"), std::memory_order_relaxed);
+        s_version.store(version, std::memory_order_relaxed);
+    }
+    return s_hidden.load(std::memory_order_relaxed);
+}

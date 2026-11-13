@@ -444,17 +444,9 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
     _chkrow('Dithering', 'dith', 'toggleDith', 'The PS2&#39;s grainy colour pattern. Untick for smooth, clean gradients.') +
     _chkrow('Mipmapping', 'mip', 'toggleMip', 'Less shimmer on distant floors and walls. Applies after a restart.') +
     _chkrow('Upscaling Fixes', 'upfix', 'toggleUpfix', 'Removes seams and thin lines at high resolutions. Applies after a restart.') +
-    _chkrow('Scarf Body Collision', 'scol', 'toggleScol', 'The scarf keeps its float and trail but no longer passes through Hotsuma.') +
     '        </sc-if>\n        <sc-if value="{{tabController}}"')
 
-# ---- LOCAL PATCH: mod switches (Display tab) ----
-_i = template.index('V-Sync</label>') + len('V-Sync</label>')
-template = template[:_i] + ('\n          <label class="chk" title="Also F3 in game"><input type="checkbox" checked="{{cam}}" sc-camel-on-change="{{toggleCam}}">'
-                            + CHK + 'Close-Up Camera (F3)</label>'
-                            + '\n          <label class="chk" title="Also F5 in game"><input type="checkbox" checked="{{hud}}" sc-camel-on-change="{{toggleHud}}">'
-                            + CHK + 'Hide HUD (F5)</label>'
-                            + '\n          <label class="chk" title="Hides the black cinematic bars (the TATE kill camera, the game&#39;s own scenes). Also Shift+F5 in game"><input type="checkbox" checked="{{bars}}" sc-camel-on-change="{{toggleBars}}">'
-                            + CHK + 'Hide Bars (Shift+F5)</label>') + template[_i:]
+# (The mod switches - close-up camera, HUD, bars, scarf - are in the Mod Menu: see GAME_MODS.)
 
 # ---- LOCAL PATCH: the Performance tab (frame generation, its target, low latency, the overlay) ----
 template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
@@ -1464,7 +1456,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1505,7 +1497,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
@@ -1577,6 +1569,26 @@ L("""  navTab(d) {""",
 # Resolution: the GPU warning as a notice when 4K / 8K is picked (it no longer fits in the label).
 L("""pick: set({ res: r[0], resOpen: false })""",
   """pick: () => { this.setState({ res: r[0], resOpen: false }); if (r[0] === '4K') this.toastMsg('4K needs a strong graphics card'); else if (r[0] === '8K') this.toastMsg('8K is experimental: high-end graphics cards only'); }""")
+
+# Mod Menu: the game's own mods first (their own settings keys), then the rest.
+L("""    const modRows = MODS.map((m) => ({""",
+  """    const GAME_MODS = [
+      ['cam', 'Close-up camera (F3)', 'A closer, over-the-shoulder camera for more intimate combat.', false],
+      ['hud', 'Hide HUD (F5)', 'Health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.', false],
+      ['bars', 'Hide cinematic bars (Shift+F5)', 'No black bands in the TATE kill camera and the game\\'s own scenes.', false],
+      ['noscarf', 'Remove scarf', 'Hotsuma without his scarf.', false],
+      ['scol', 'Scarf body collision', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true]
+    ];
+    const gameModRows = GAME_MODS.map((m) => {
+      const on = m[3] ? s[m[0]] !== false : !!s[m[0]];
+      return { name: m[1], desc: m[2], on: on, toggle: () => this.setState({ [m[0]]: !on }) };
+    });
+    const modRows = gameModRows.concat(MODS.map((m) => ({""")
+
+L("""      toggle: () => this.setState({ mods: Object.assign({}, this.state.mods, { [m[0]]: !this.state.mods[m[0]] }) })
+    }));""",
+  """      toggle: () => this.setState({ mods: Object.assign({}, this.state.mods, { [m[0]]: !this.state.mods[m[0]] }) })
+    })));""")
 
 template = template[:logic_start] + logic + template[logic_end:]
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))

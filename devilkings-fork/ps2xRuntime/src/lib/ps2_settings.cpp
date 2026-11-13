@@ -570,6 +570,9 @@ namespace ps2x::settings
                  "On a 120 Hz or faster screen, adds in-between pictures made from the game's own, so motion is as smooth "
                  "as the screen. Adds about one frame (16 ms) of delay. F4 switches it while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): no scarf at all (ps2_hud_mod.cpp).
+            add({"game", "hide_scarf", "Remove scarf", "Hotsuma without his scarf.", Kind::Bool, "false", nullptr, {}, {}, 0, 0,
+                 nullptr, true});
             // LOCAL PATCH (mod): the scarf slides around Hotsuma's body instead of through it (ps2_scarf_collide.cpp).
             add({"game", "scarf_collision", "Scarf body collision",
                  "The scarf keeps its float and trail but no longer passes through Hotsuma's body.",

@@ -98,6 +98,8 @@ HUD = [
     'Draw__12DrawDecGaugeFv_0x3d8820', 'DrawBossGauge02__FP6MlTaski_0x3d7cc0', 'Draw__7DrainHPFv_0x2f6600',
     'Draw__12VanishEffectFv_0x3db870', 'Draw__13VanishEffectsFv_0x3dba70',
 ]
+# The scarf (Remove scarf mod): its own switch, ps2xScarfHidden().
+SCARF = 'Draw__14CPlayerMufflerFv_0x2b8e60'
 HOOK = ('    // LOCAL PATCH (HUD mod): with the HUD hidden (F5, [game] hide_hud) this HUD piece is not drawn.\n'
         '    {\n'
         '        extern bool ps2xHudHidden();\n'
@@ -122,6 +124,18 @@ for name in HUD:
     write(path, t[:m.end()] + HOOK + t[m.end():], nl)
     hooked += 1
 print('HUD draw functions hooked:', hooked, 'of', len(HUD))
+
+path = os.path.join(D, SCARF + '.cpp')
+raw = read(path)
+if 'ps2xScarfHidden' not in raw:
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    m = re.search(r'\n    ctx->pc = 0x0*2b8e60u;\n', t, re.I)
+    if m:
+        t = t[:m.end()] + HOOK.replace('ps2xHudHidden', 'ps2xScarfHidden').replace(
+            'with the HUD hidden (F5, [game] hide_hud) this HUD piece is not drawn', 'Remove scarf mod: the scarf is not drawn') + t[m.end():]
+        write(path, t, nl)
+        print('scarf draw hooked')
 
 # ---- 3. Cinematic bars mod: EventAction::Draw's two band draws (EasyDrawPol2DZ at 0x307f58 and 0x307f9c) skipped while
 # ps2xCinemaBarsHidden() (ps2_hud_mod.cpp). Skipping a call is the same as the call returning at once.
