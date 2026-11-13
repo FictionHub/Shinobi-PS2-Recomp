@@ -178,3 +178,36 @@ if 'ps2xScarfCollide' not in t:
         write(path, t, nl)
         done = 1
 print('scarf collision hook added:', done, '(0 = already done)')
+
+# ---- 5. Cinematic bars mod, second source: a scene can narrow HyScreen's clipping rectangle (+0x10..+0x1C, applied as
+# the GS scissor by HyScreen::_settingToEnvironment, 0x3322c0) to a letterbox - the picture is then simply not drawn
+# above and below. While ps2xCinemaBarsHidden() the per-frame copy of that rectangle is widened to the whole screen
+# (HyScreen::_clippingRect then clamps it to the real size); the game's own value is left as it is.
+path = os.path.join(D, '_settingToEnvironment__8HyScreenFv_0x3322c0.cpp')
+raw = read(path)
+done = 0
+if 'ps2xCinemaBarsHidden' not in raw:
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    old = '    ctx->in_delay_slot = false;\n    ctx->pc = 0x332200u;\n'
+    if t.count(old) == 1:
+        t = t.replace(old, '''    ctx->in_delay_slot = false;
+    // LOCAL PATCH (cinematic bars mod): the clipping rectangle's copy (sp+0x50..0x5C) to the whole screen.
+    if (ps2xCinemaBarsHidden())
+    {
+        const uint32_t sp = GPR_U32(ctx, 29);
+        const float full[4] = {0.0f, 0.0f, 100000.0f, 100000.0f};
+        for (uint32_t k = 0; k < 4u; ++k)
+        {
+            uint32_t bits;
+            std::memcpy(&bits, &full[k], sizeof(bits));
+            WRITE32(ADD32(sp, 0x50u + 4u * k), bits);
+        }
+    }
+    ctx->pc = 0x332200u;
+''')
+        k = t.find('void _settingToEnvironment__8HyScreenFv_0x3322c0(')
+        t = t[:k] + 'bool ps2xCinemaBarsHidden(); // ps2_hud_mod.cpp (LOCAL PATCH: cinematic bars mod)\n' + t[k:]
+        write(path, t, nl)
+        done = 1
+print('cinematic bars (screen clipping) hook added:', done, '(0 = already done)')
