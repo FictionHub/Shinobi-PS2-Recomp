@@ -382,7 +382,7 @@ template = template[:_m.start()] + (
     '          <p class="note" style="margin:2px 0 0 30px;font-size:11px;color:#777">L2 stiffens part way down and clicks through just before the ninja magic fires.</p>\n'
     '        </div>\n'
     '        </sc-if>') + template[_m.start():]
-css_tabs = ('html.manual-only body>*:not([role=dialog]){visibility:hidden!important}html body .pad-focus.pad-focus.pad-focus{outline:3px solid #ff1f3d!important;outline-offset:-3px!important;box-shadow:inset 0 0 14px rgba(255,31,61,.55),0 0 14px rgba(255,31,61,.7)!important;position:relative;z-index:2}.tabs{margin:0 0 6px}.tabs .seg{flex:1 1 auto;min-width:0;padding-left:6px!important;padding-right:6px!important;font-size:12.5px!important;letter-spacing:0!important}html.tabbed .grp>*{animation:none!important;opacity:1!important}'
+css_tabs = ('html.manual-only body>*:not([role=dialog]){visibility:hidden!important}html body .pad-focus.pad-focus.pad-focus{outline:3px solid #ff1f3d!important;outline-offset:-3px!important;box-shadow:inset 0 0 14px rgba(255,31,61,.55),0 0 14px rgba(255,31,61,.7)!important;position:relative;z-index:2}.tabs{margin:0 0 6px}.tabs .seg{flex:1 1 auto;min-width:0;padding-left:3px!important;padding-right:3px!important;font-size:12px!important;letter-spacing:0!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}html.tabbed .grp>*{animation:none!important;opacity:1!important}'
             '.grp>sc-if>div,.grp sc-if>div{margin-bottom:2px}')
 template = must_replace(template, '@media (prefers-reduced-motion:reduce)', css_tabs + '@media (prefers-reduced-motion:reduce)')
 
@@ -1461,7 +1461,7 @@ L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
-  """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'Performance'], ['controller', 'Controller']]""")
+  """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
   """      tabController: s.tab === 'controller',
       tabEffects: s.tab === 'effects',
