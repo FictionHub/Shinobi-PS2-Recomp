@@ -410,6 +410,7 @@ add_library(ps2_runtime STATIC
     src/lib/ps2_close_camera.cpp
     src/lib/ps2_estimate_trace.cpp
     src/lib/ps2_hud_mod.cpp
+    src/lib/ps2_framegen.cpp
     src/lib/ps2_cri_rna.cpp
     src/lib/ps2_player_textures.cpp
     src/launcher/launcher_settings_map.cpp

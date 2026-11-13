@@ -8,6 +8,7 @@
 #include "runtime/gs/gs_frontend.h"
 #include "runtime/gs/gs_hud_layout.h"
 #include "runtime/gs/gs_pgs.h"
+#include "runtime/ps2_framegen.h"
 #include "runtime/ee_scheduler.h"
 #include "ThreadNaming.h"
 #include "Kernel/Stubs/Audio.h"
@@ -1595,6 +1596,7 @@ static void UploadVulkanFrame(Texture2D &tex, uint64_t currentTick, uint32_t &ou
             UnloadImage(blank);
         }
         UpdateTexture(tex, pixels);
+        ps2x::framegen::noteFrame(pixels, width, height); // LOCAL PATCH: frame generation (cuts are never blended)
         s_width = width;
         s_height = height;
         DumpPresentedFrame(currentTick, pixels, width, height, width * 4u, 0u);
@@ -4216,6 +4218,9 @@ void main()
                 const auto pct = [](int v) { return v >= 0 ? std::to_string(v) + "%" : std::string("--"); };
                 char l1[64], l2[64], l3[64], l4[64];
                 std::snprintf(l1, sizeof(l1), "FPS %.0f   %.1f ms", fps, fps > 0.5f ? 1000.0f / fps : 0.0f);
+                // With frame generation: the pictures the screen really shows a second (game + generated).
+                if (const float shown = ps2x::framegen::shownPerSecond(); shown > 0.5f)
+                    std::snprintf(l1, sizeof(l1), "FPS %.0f > %.0f FG   %.1f ms", fps, shown, fps > 0.5f ? 1000.0f / fps : 0.0f);
                 std::snprintf(l2, sizeof(l2), "AVG %s   1%% LOW %s",
                               avg > 0.0 ? std::to_string(static_cast<int>(avg + 0.5)).c_str() : "--",
                               low > 0.0f ? std::to_string(static_cast<int>(low + 0.5f)).c_str() : "--");
@@ -4461,6 +4466,8 @@ void PS2Runtime::run()
                 UnloadImage(small);
             }
         }
+        // LOCAL PATCH: frame generation: on a 90 Hz+ screen, the in-between picture for this moment (ps2_framegen.cpp).
+        const Texture2D shownTex = ps2x::framegen::present(frameTex, presentWidth, presentHeight);
         BeginDrawing();
         ClearBackground(BLACK);
         const float srcWidth = static_cast<float>(std::max<uint32_t>(1u, presentWidth));
@@ -4491,7 +4498,7 @@ void PS2Runtime::run()
             (screenHeight - dstHeight) * 0.5f,
             dstWidth,
             dstHeight};
-        presentation.drawFrame(frameTex, srcRect, dstRect);
+        presentation.drawFrame(shownTex, srcRect, dstRect);
         presentation.drawFps(dstRect);
         ps2xDrawHotkeyToast();
         if (ps2x::ingame::isOpen()) // the game dimmed behind the in-game menu
@@ -4513,6 +4520,14 @@ void PS2Runtime::run()
             ps2x::settings::set("game", "close_camera", on ? "true" : "false");
             ps2x::settings::save();
             ps2xHotkeyToast("Close-up camera", on);
+        }
+        // LOCAL PATCH: F6 switches frame generation (ps2_framegen.cpp; saved).
+        if (IsKeyPressed(KEY_F6))
+        {
+            const bool on = !ps2x::settings::getBool("video", "frame_generation");
+            ps2x::settings::set("video", "frame_generation", on ? "true" : "false");
+            ps2x::settings::save();
+            ps2xHotkeyToast(GetMonitorRefreshRate(GetCurrentMonitor()) < 90 && on ? "Frame generation (needs 90 Hz+)" : "Frame generation", on);
         }
         // LOCAL PATCH (mod): F5 hides / shows the HUD (ps2_hud_mod.cpp; saved).
         if (IsKeyPressed(KEY_F5))
