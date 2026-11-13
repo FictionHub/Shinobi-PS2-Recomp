@@ -4282,8 +4282,8 @@ void main()
                               low > 0.0f ? std::to_string(static_cast<int>(low + 0.5f)).c_str() : "--");
                 if (fgOn)
                 {
-                    std::snprintf(l1, sizeof(l1), "FPS %.0f   GAME %.0f   %.1f ms", shownFps, fps, shownMs);
-                    std::snprintf(l2, sizeof(l2), "AVG %s   1%% LOW %s   FG",
+                    std::snprintf(l1, sizeof(l1), "FPS %.0f   %.1f ms", shownFps, shownMs);
+                    std::snprintf(l2, sizeof(l2), "AVG %s   1%% LOW %s",
                                   shownAvg > 0.0 ? std::to_string(static_cast<int>(shownAvg + 0.5)).c_str() : "--",
                                   shownLow > 0.0f ? std::to_string(static_cast<int>(shownLow + 0.5f)).c_str() : "--");
                 }
