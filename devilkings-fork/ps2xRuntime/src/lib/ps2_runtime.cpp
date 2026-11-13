@@ -4082,15 +4082,23 @@ void main()
             // monitor exactly is shown by Windows with "independent flip" (the picture goes straight to the screen), and a
             // child window is not drawn over that: the menu paused the game but stayed invisible. One line of height less keeps
             // Windows compositing the window normally, so the menu shows; the bottom line of the picture is not noticeable.
+            // LOCAL PATCH: checked against the window's real size every frame (it used to be remembered in a flag, which
+            // stayed set after a switch back to exclusive fullscreen, so from the second F1 on the window was full size
+            // and the menu invisible). A few tries per change, in case the size never matches exactly (scaling).
             if (window == "borderless")
             {
-                static bool s_menuShrunk = false;
-                const bool menuOpen = ps2x::ingame::isOpen();
-                if (menuOpen != s_menuShrunk)
+                static int s_wantH = -1, s_tries = 0;
+                const int monitor = GetCurrentMonitor();
+                const int mw = GetMonitorWidth(monitor), wantH = GetMonitorHeight(monitor) - (ps2x::ingame::isOpen() ? 1 : 0);
+                if (wantH != s_wantH)
                 {
-                    const int monitor = GetCurrentMonitor();
-                    SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor) - (menuOpen ? 1 : 0));
-                    s_menuShrunk = menuOpen;
+                    s_wantH = wantH;
+                    s_tries = 0;
+                }
+                if ((GetScreenHeight() != wantH || GetScreenWidth() != mw) && s_tries < 10)
+                {
+                    SetWindowSize(mw, wantH);
+                    ++s_tries;
                 }
             }
             // LOCAL PATCH: fps_target = unlocked also drops the vsync wait (no cap of any kind). The window is created with
