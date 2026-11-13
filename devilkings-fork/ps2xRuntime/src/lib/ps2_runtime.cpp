@@ -42,6 +42,8 @@
 #include "runtime/ps2_ingame_menu.h"
 #include <memory>
 
+void ps2xCriRnaMix(int16_t *out, size_t frames); // ps2_cri_rna.cpp (GitHub issue #2)
+
 namespace
 {
     struct WatchRange
@@ -490,6 +492,8 @@ namespace
         if (ps2x::iop::IopSubsystem *iop = g_spu2AudioSource.load())
             produced = iop->readAudio(out, frames);
         std::fill(out + produced * 2u, out + static_cast<size_t>(frames) * 2u, int16_t{0});
+        // LOCAL PATCH (GitHub issue #2): CRI's streamed audio, played on the PC (ps2_cri_rna.cpp).
+        ps2xCriRnaMix(out, frames);
 
         // PS2X_AUDIO_DUMP=<file>: append the played 48 kHz stereo s16 PCM.
         static FILE *s_dump = []() -> FILE *
@@ -2380,6 +2384,10 @@ bool PS2Runtime::loadELF(const std::string &elfPath)
                                       m_cpuContext.pc,
                                       elfCrc32,
                                       elfCrc32Valid);
+    {
+        extern void ps2xCriRnaInstall(PS2Runtime &runtime); // ps2_cri_rna.cpp (GitHub issue #2)
+        ps2xCriRnaInstall(*this);
+    }
 
     RUNTIME_LOG("ELF file loaded successfully. Entry point: 0x" << std::hex << m_cpuContext.pc << std::dec);
     return true;

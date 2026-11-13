@@ -208,19 +208,16 @@ namespace
     }
 }
 
-// Called from CPlayerMuffler::Draw (src/runner/Draw__14CPlayerMufflerFv_0x2b8e60.cpp) with the scarf object, on the
-// game thread, before the scarf's texture is set.
-void ps2xScarfColourHook(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime, uint32_t muffler)
+// LOCAL PATCH: one texture recoloured live (the scarf, the sword): `texture` is a HyTexture, `wanted` original or #rrggbb.
+static void recolourTexture(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime, ScarfState &s, uint32_t texture,
+                            std::string wanted)
 {
-    ScarfState &s = scarf();
-    std::string wanted = ps2x::settings::get("game", "scarf_color");
     uint8_t target[3] = {0, 0, 0};
     if (!parseColour(wanted, target))
         wanted = "original";
 
     // HyEnv::SetTexture(env, texture, 0) (0x32da50, called right after this hook) takes the unit as
     // *(*(texture + 0x18) + 0): the table at +0x18 holds the units themselves (HyTextureSurface + 0x10 is the same unit).
-    const uint32_t texture = rd32(rdram, muffler + 0xC4u);
     const uint32_t units = texture ? rd32(rdram, texture + 0x18u) : 0u;
     const uint32_t unit = units ? rd32(rdram, units) : 0u;
     const uint32_t word54 = unit ? rd32(rdram, unit + 0x54u) : 0u;
@@ -234,9 +231,9 @@ void ps2xScarfColourHook(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime,
         if (!s_missingLogged && wanted != "original")
         {
             s_missingLogged = true;
-            std::fprintf(stderr, "[scarf] no texture data found: muffler 0x%08x texture 0x%08x units 0x%08x unit 0x%08x "
+            std::fprintf(stderr, "[scarf] no texture data found: texture 0x%08x units 0x%08x unit 0x%08x "
                                  "word54 0x%08x index %u buffer 0x%08x\n",
-                         muffler, texture, units, unit, word54, index, buffer);
+                         texture, units, unit, word54, index, buffer);
         }
         return;
     }
@@ -395,4 +392,20 @@ void ps2xScarfColourHook(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime,
     SET_GPR_U32(&call.context, 31, 0u);
     runtime->eeScheduler().queueInvocation(std::move(call));
     std::fprintf(stderr, "[scarf] colour %s\n", wanted.c_str());
+}
+
+// Called from CPlayerMuffler::Draw (src/runner/Draw__14CPlayerMufflerFv_0x2b8e60.cpp) with the scarf object, on the
+// game thread, before the scarf's texture is set.
+void ps2xScarfColourHook(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime, uint32_t muffler)
+{
+    recolourTexture(rdram, ctx, runtime, scarf(), rd32(rdram, muffler + 0xC4u), ps2x::settings::get("game", "scarf_color"));
+}
+
+// LOCAL PATCH (sword colour): another of the player's textures, same machinery (ps2_player_textures.cpp picks it).
+void ps2xRecolourPlayerTexture(uint8_t *rdram, R5900Context *ctx, PS2Runtime *runtime, int slot, uint32_t texture,
+                               const std::string &wanted)
+{
+    static ScarfState s_states[4];
+    if (slot >= 0 && slot < 4)
+        recolourTexture(rdram, ctx, runtime, s_states[slot], texture, wanted);
 }
