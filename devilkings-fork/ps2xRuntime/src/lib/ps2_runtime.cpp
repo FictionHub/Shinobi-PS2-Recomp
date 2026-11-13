@@ -4506,6 +4506,14 @@ void PS2Runtime::run()
             ps2x::settings::save();
             ps2xHotkeyToast("Close-up camera", on);
         }
+        // LOCAL PATCH (mod): F5 hides / shows the HUD (ps2_hud_mod.cpp; saved).
+        if (IsKeyPressed(KEY_F5))
+        {
+            const bool hidden = !ps2x::settings::getBool("game", "hide_hud");
+            ps2x::settings::set("game", "hide_hud", hidden ? "true" : "false");
+            ps2x::settings::save();
+            ps2xHotkeyToast("HUD", !hidden);
+        }
         // LOCAL PATCH: F2 shows / hides the performance overlay at any time (saved, so it stays as left).
         if (IsKeyPressed(KEY_F2) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
         {

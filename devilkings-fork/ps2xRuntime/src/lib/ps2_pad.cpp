@@ -174,11 +174,14 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
             {GAMEPAD_BUTTON_MIDDLE_RIGHT, PAD_START},      {GAMEPAD_BUTTON_MIDDLE_LEFT, PAD_SELECT},
             {GAMEPAD_BUTTON_LEFT_THUMB, PAD_L3},           {GAMEPAD_BUTTON_RIGHT_THUMB, PAD_R3}};
         float lx = 0.0f, ly = 0.0f, rx = 0.0f, ry = 0.0f;
+        // LOCAL PATCH (controller remapping, GitHub issue #5): the controller's own buttons are gathered first (same bit
+        // layout as the pad report, set = held), then [controls] pad_<button> decides which game button each one presses.
+        uint16_t phys = 0u;
         for (int pad : s_pads)
         {
             for (const auto &[button, bit] : kButtons)
                 if (IsGamepadButtonDown(pad, button))
-                    clearBit(bit);
+                    phys |= bit;
             {
                 // LOCAL PATCH (haptics trace): how far L2 is pressed (raylib: -1 released .. 1 fully in).
                 const float l2 = GetGamepadAxisMovement(pad, GAMEPAD_AXIS_LEFT_TRIGGER);
@@ -215,16 +218,16 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
                     {ds.options, PAD_START}, {ds.create, PAD_SELECT},   {ds.l3, PAD_L3},         {ds.r3, PAD_R3}};
                 for (const auto &[down, bit] : pressed)
                     if (down)
-                        clearBit(bit);
+                        phys |= bit;
                 // LOCAL PATCH: with the L2 trigger resistance on, L2 counts as pressed only past the stiff part (the
                 // effect gives way at about 70% of its travel): a light touch no longer fires the ninja magic. The
                 // controller's own L2 bit (set at a light touch, here or through the usual APIs) is overridden.
                 if (ps2x::settings::getBool("input", "trigger_resistance"))
                 {
                     if (ds.l2 >= 190)
-                        clearBit(PAD_L2);
+                        phys |= PAD_L2;
                     else
-                        btns |= PAD_L2;
+                        phys &= static_cast<uint16_t>(~PAD_L2);
                 }
                 const float dlx = (ds.lx - 127.5f) / 127.5f, dly = (ds.ly - 127.5f) / 127.5f;
                 const float drx = (ds.rx - 127.5f) / 127.5f, dry = (ds.ry - 127.5f) / 127.5f;
@@ -239,6 +242,37 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
                     ry = dry;
                 }
             }
+        }
+        {
+            static uint64_t s_mapVersion = ~0ull;
+            static std::vector<std::pair<uint16_t, uint16_t>> s_map; // (game button, controller button)
+            const uint64_t version = ps2x::settings::version();
+            if (version != s_mapVersion)
+            {
+                s_mapVersion = version;
+                s_map.clear();
+                static const std::pair<const char *, uint16_t> kNames[] = {
+                    {"up", PAD_UP},         {"down", PAD_DOWN},     {"left", PAD_LEFT},     {"right", PAD_RIGHT},
+                    {"cross", PAD_CROSS},   {"circle", PAD_CIRCLE}, {"square", PAD_SQUARE}, {"triangle", PAD_TRIANGLE},
+                    {"l1", PAD_L1},         {"r1", PAD_R1},         {"l2", PAD_L2},         {"r2", PAD_R2},
+                    {"start", PAD_START},   {"select", PAD_SELECT}, {"l3", PAD_L3},         {"r3", PAD_R3}};
+                const auto bitOf = [](std::string name) -> uint16_t
+                {
+                    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                    for (const auto &[n, b] : kNames)
+                        if (name == n)
+                            return b;
+                    return 0u; // "none" or unknown: not on the controller
+                };
+                for (const auto &[name, bit] : kNames)
+                {
+                    const std::string source = ps2x::settings::get("controls", (std::string("pad_") + name).c_str());
+                    s_map.emplace_back(bit, source.empty() ? bit : bitOf(source));
+                }
+            }
+            for (const auto &[target, source] : s_map)
+                if (source != 0u && (phys & source) != 0u)
+                    clearBit(target);
         }
         // LOCAL PATCH: a round dead zone ([input] stick_deadzone, % of the stick's travel, 15 by default): an analog stick
         // that rests slightly off centre (a worn or drifting DualSense / Xbox pad) would otherwise walk the character or
@@ -362,6 +396,15 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
             data[4] = static_cast<uint8_t>(std::clamp(128.0f + std::clamp(cx, -1.0f, 1.0f) * 127.0f, 0.0f, 255.0f));
             data[5] = static_cast<uint8_t>(std::clamp(128.0f + std::clamp(cy, -1.0f, 1.0f) * 127.0f, 0.0f, 255.0f));
         }
+    }
+
+    // LOCAL PATCH (GitHub issue #4): invert the camera (right stick, camera keys and mouse alike).
+    {
+        const auto flip = [](uint8_t v) { return static_cast<uint8_t>(std::clamp(256 - static_cast<int>(v), 0, 255)); };
+        if (ps2x::settings::getBool("input", "invert_camera_x"))
+            data[4] = flip(data[4]);
+        if (ps2x::settings::getBool("input", "invert_camera_y"))
+            data[5] = flip(data[5]);
     }
 
     data[2] = static_cast<uint8_t>(btns & 0xFF);

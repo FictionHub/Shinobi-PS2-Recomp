@@ -451,7 +451,19 @@ _i = template.index('V-Sync</label>') + len('V-Sync</label>')
 template = template[:_i] + ('\n          <label class="chk" title="Also F2 in game"><input type="checkbox" checked="{{ovl}}" sc-camel-on-change="{{toggleOvl}}">'
                             + CHK + 'Performance Overlay (F2)</label>'
                             + '\n          <label class="chk" title="Also F3 in game"><input type="checkbox" checked="{{cam}}" sc-camel-on-change="{{toggleCam}}">'
-                            + CHK + 'Close-Up Camera (F3)</label>') + template[_i:]
+                            + CHK + 'Close-Up Camera (F3)</label>'
+                            + '\n          <label class="chk" title="Also F5 in game"><input type="checkbox" checked="{{hud}}" sc-camel-on-change="{{toggleHud}}">'
+                            + CHK + 'Hide HUD (F5)</label>') + template[_i:]
+
+# ---- LOCAL PATCH: invert camera switches in Configure Controller (Gamepad view) ----
+template = must_replace(template, '              <p class="note">{{bindNote}}</p>',
+    '              <sc-if value="{{padView}}" hint-placeholder-val="{{false}}">\n'
+    '                <div style="display:flex;gap:22px;margin:10px 0 2px">\n'
+    '                  <label class="chk"><input type="checkbox" checked="{{invX}}" sc-camel-on-change="{{toggleInvX}}">' + CHK + 'Invert camera left/right</label>\n'
+    '                  <label class="chk"><input type="checkbox" checked="{{invY}}" sc-camel-on-change="{{toggleInvY}}">' + CHK + 'Invert camera up/down</label>\n'
+    '                </div>\n'
+    '              </sc-if>\n'
+    '              <p class="note">{{bindNote}}</p>')
 
 # Bottom of the left column: the ownership notice above the PlayStation / SEGA logos, the studio and author lines below.
 template = must_replace(template,
@@ -1439,7 +1451,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0);""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0);""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['controller', 'Controller']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1457,7 +1469,87 @@ L("""      tabController: s.tab === 'controller',""",
       ovl: !!s.ovl,
       toggleOvl: () => this.setState({ ovl: !this.state.ovl }),
       cam: !!s.cam,
-      toggleCam: () => this.setState({ cam: !this.state.cam }),""")
+      toggleCam: () => this.setState({ cam: !this.state.cam }),
+      hud: !!s.hud,
+      toggleHud: () => this.setState({ hud: !this.state.hud }),""")
+
+# ---- LOCAL PATCH (GitHub issues #4 and #5): controller remapping and invert camera (Configure Controller, Gamepad) ----
+L("""      bind: Object.assign({}, this.defBinds, init ? init.binds : {}),""",
+  """      bind: Object.assign({}, this.defBinds, init ? init.binds : {}),
+      pbind: Object.assign({}, this.defPad, init ? init.pbinds : {}),""")
+L("""    const init = window.__launcherInit || null;""",
+  """    this.defPad = { up: 'up', down: 'down', left: 'left', right: 'right', cross: 'cross', circle: 'circle', square: 'square', triangle: 'triangle',
+      l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
+    const init = window.__launcherInit || null;""")
+L("""bind: s.bind, mods: s.mods });""",
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, mods: s.mods });""")
+L("""add('trig', s.trig ? 1 : 0);""",
+  """add('trig', s.trig ? 1 : 0);
+    add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
+    Object.keys(s.pbind || {}).forEach((k) => add('pbind.' + k, s.pbind[k]));""")
+L("""    const kb = s.device === 'keyboard';
+    const bindRows = BL.map((r) => {""",
+  """    const kb = s.device === 'keyboard';
+    // Gamepad: each game button shows the controller button that presses it. Pick one, then press the button you want;
+    // two game buttons swap their controller buttons rather than share one.
+    const PADN = { up: 'D-Pad Up', down: 'D-Pad Down', left: 'D-Pad Left', right: 'D-Pad Right', cross: 'Cross', circle: 'Circle',
+      square: 'Square', triangle: 'Triangle', l1: 'L1', r1: 'R1', l2: 'L2', r2: 'R2', start: 'Start', select: 'Select', l3: 'L3', r3: 'R3', none: 'None' };
+    const PADROWS = ['up', 'down', 'left', 'right', 'cross', 'circle', 'square', 'triangle', 'l1', 'r1', 'l2', 'r2', 'start', 'select', 'l3', 'r3'];
+    const pb = s.pbind || this.defPad;
+    const bindRows = !kb ? PADROWS.map((k) => {
+      const listening = s.listening === k;
+      const now = PADN[pb[k]] || PADN[k];
+      return {
+        label: PADN[k],
+        key: listening ? 'Press a button...' : now,
+        cls: listening ? 'listen' : '',
+        aria: 'Remap ' + PADN[k] + ', currently the ' + now + ' button',
+        pick: () => { this._capArm = false; this.setState({ listening: k }); },
+        onKey: (e) => { if (s.listening === k && e.key === 'Escape') { e.preventDefault(); this.setState({ listening: null }); } },
+        onBlur: () => {}
+      };
+    }) : BL.map((r) => {""")
+L("""      bindNote: kb ? 'Click a binding, then press the key you want. Esc cancels. A key already in use is moved to the new action.' : 'Connected gamepads use the standard layout shown here, mapped automatically.',
+      resetBinds: set({ bind: Object.assign({}, this.defBinds), listening: null }),""",
+  """      bindNote: kb ? 'Click a binding, then press the key you want. Esc cancels. A key already in use is moved to the new action.' : 'Pick a button (click it or press Cross on it), then press the controller button you want for it. Two buttons swap places. Esc cancels.',
+      resetBinds: () => this.setState(kb ? { bind: Object.assign({}, this.defBinds), listening: null } : { pbind: Object.assign({}, this.defPad), invX: false, invY: false, listening: null }),
+      padView: !kb,
+      invX: !!s.invX,
+      toggleInvX: () => this.setState({ invX: !this.state.invX }),
+      invY: !!s.invY,
+      toggleInvY: () => this.setState({ invY: !this.state.invY }),""")
+# Capture a button while a Gamepad row is waiting: the Gamepad API (Xbox and other pads) here, a DualSense the launcher
+# reads itself in padCmd.
+L("""      // While the game is starting or running the controller belongs to the game: Cross would press the launcher's Stop Game button.""",
+  """      if (this.state && this.state.listening && this.state.device === 'gamepad') {
+        const STD = ['cross', 'circle', 'square', 'triangle', 'l1', 'r1', 'l2', 'r2', 'select', 'start', 'l3', 'r3', 'up', 'down', 'left', 'right'];
+        let hit = null;
+        pads.forEach((p) => { if (p.mapping === 'standard') STD.forEach((n, i) => { if (!hit && p.buttons[i] && p.buttons[i].pressed) hit = n; }); });
+        if (!hit) this._capArm = true;
+        else if (this._capArm) {
+          this._capArm = false;
+          // The button that was just bound counts for the menu only after it is let go.
+          ['cross', 'circle', 'start', 'up', 'down', 'left', 'right', 'l1', 'r1'].forEach((n) => { held[n] = { next: Infinity }; });
+          this.padCapture(hit);
+        }
+      }
+      // While the game is starting or running the controller belongs to the game: Cross would press the launcher's Stop Game button.""")
+L("""    if (name === 'lost') { this.hostPad = false; return; }""",
+  """    if (name === 'lost') { this.hostPad = false; return; }
+    if (this.state && this.state.listening && this.state.device === 'gamepad') { this.padCapture(name); return; }""")
+L("""  navTab(d) {""",
+  """  padCapture(name) {
+    const s = this.state;
+    const key = s.listening;
+    if (!key || !this.defPad[name]) return;
+    const pb = Object.assign({}, s.pbind || this.defPad);
+    const old = pb[key];
+    Object.keys(pb).forEach((k) => { if (k !== key && pb[k] === name) pb[k] = old; });
+    pb[key] = name;
+    this.setState({ pbind: pb, listening: null });
+  }
+
+  navTab(d) {""")
 
 template = template[:logic_start] + logic + template[logic_end:]
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))

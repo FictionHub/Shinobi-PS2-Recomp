@@ -416,6 +416,27 @@ namespace ps2x::settings
                 add({"input", "trigger_resistance", "L2 trigger resistance",
                      "L2 stiffens part way down and gives way with a click just before the ninja magic fires.",
                      Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
+                // LOCAL PATCH (GitHub issue #4): invert the camera (the right stick, the camera keys and the mouse).
+                add({"input", "invert_camera_x", "Invert camera left/right",
+                     "Pushing the camera right turns it left, and the other way round.", Kind::Bool, "false", nullptr, {}, {}, 0, 0,
+                     nullptr, true});
+                add({"input", "invert_camera_y", "Invert camera up/down",
+                     "Pushing the camera up turns it down, and the other way round.", Kind::Bool, "false", nullptr, {}, {}, 0, 0,
+                     nullptr, true});
+                // LOCAL PATCH (GitHub issue #5): controller remapping. [controls] pad_<button> = the controller button that
+                // presses it (up down left right cross circle square triangle l1 r1 l2 r2 start select l3 r3), or "none".
+                static const char *const kPadKeys[16][2] = {
+                    {"pad_up", "up"},       {"pad_down", "down"},     {"pad_left", "left"},       {"pad_right", "right"},
+                    {"pad_cross", "cross"}, {"pad_circle", "circle"}, {"pad_square", "square"},   {"pad_triangle", "triangle"},
+                    {"pad_l1", "l1"},       {"pad_r1", "r1"},         {"pad_l2", "l2"},           {"pad_r2", "r2"},
+                    {"pad_start", "start"}, {"pad_select", "select"}, {"pad_l3", "l3"},           {"pad_r3", "r3"}};
+                for (const auto &entry : kPadKeys)
+                {
+                    Definition definition{"controls", entry[0], entry[0], "The controller button that presses this one.",
+                                          Kind::Path, entry[1], nullptr, {}, {}};
+                    definition.live = true;
+                    add(definition);
+                }
             }
             {
                 // LOCAL PATCH (effects): the PCSX2 renderer settings that decide whether Shinobi's screen effects (fog, glow,
@@ -533,6 +554,10 @@ namespace ps2x::settings
             add({"game", "close_camera", "Close-up camera",
                  "A closer, over-the-shoulder camera for more intimate combat. F3 switches it while playing.", Kind::Bool,
                  "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): hide the HUD (ps2_hud_mod.cpp). F5 in game.
+            add({"game", "hide_hud", "Hide HUD",
+                 "Hides health, kunai, magic, the TATE counter and boss gauges for a clean screen. F5 switches it while playing.",
+                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH: the performance overlay (FPS, frame time, 1% low, CPU, GPU, RAM, VRAM) in the top-left corner.
             add({"performance", "stats_overlay", "Performance overlay",
                  "FPS, frame time, 1% lows, CPU and GPU use, RAM and VRAM in the top-left corner while you play.",

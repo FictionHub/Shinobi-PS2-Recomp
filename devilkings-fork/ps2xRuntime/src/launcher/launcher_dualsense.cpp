@@ -78,7 +78,7 @@ namespace launcher::dualsense
 
         // The menu buttons from a report: up, down, left, right, cross, circle, l1, r1, options. False if not a report
         // with buttons (the simple Bluetooth report has them elsewhere).
-        bool decode(const uint8_t *r, DWORD size, bool bluetooth, bool out[9])
+        bool decode(const uint8_t *r, DWORD size, bool bluetooth, bool out[16])
         {
             const uint8_t *p = nullptr;
             uint8_t lx = 128, ly = 128, b0 = 8, b1 = 0;
@@ -114,12 +114,21 @@ namespace launcher::dualsense
             out[6] = (b1 & 0x01) != 0; // L1
             out[7] = (b1 & 0x02) != 0; // R1
             out[8] = (b1 & 0x20) != 0; // options
+            // LOCAL PATCH (controller remapping): the rest, so the Configure Controller page can bind any button.
+            out[9] = (b0 & 0x10) != 0;  // square
+            out[10] = (b0 & 0x80) != 0; // triangle
+            out[11] = (b1 & 0x04) != 0; // L2
+            out[12] = (b1 & 0x08) != 0; // R2
+            out[13] = (b1 & 0x10) != 0; // create
+            out[14] = (b1 & 0x40) != 0; // L3
+            out[15] = (b1 & 0x80) != 0; // R3
             return true;
         }
 
         void worker(std::function<void(const std::wstring &)> send)
         {
-            static const wchar_t *kNames[9] = {L"up", L"down", L"left", L"right", L"cross", L"circle", L"l1", L"r1", L"start"};
+            static const wchar_t *kNames[16] = {L"up", L"down", L"left", L"right", L"cross", L"circle", L"l1", L"r1", L"start",
+                                                 L"square", L"triangle", L"l2", L"r2", L"select", L"l3", L"r3"};
             const auto clock = [] { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); };
             while (g_running.load())
             {
@@ -132,8 +141,8 @@ namespace launcher::dualsense
                     continue;
                 }
                 send(L"pad:host"); // the page leaves this controller to us from now on
-                bool held[9] = {};
-                double next[9] = {};
+                bool held[16] = {};
+                double next[16] = {};
                 bool first = true;
                 std::vector<uint8_t> report(128);
                 while (g_running.load())
@@ -141,11 +150,11 @@ namespace launcher::dualsense
                     DWORD got = 0;
                     if (!ReadFile(h, report.data(), static_cast<DWORD>(report.size()), &got, nullptr) || got == 0)
                         break; // disconnected
-                    bool now[9] = {};
+                    bool now[16] = {};
                     if (!decode(report.data(), got, bluetooth, now))
                         continue;
                     const double t = clock();
-                    for (int i = 0; i < 9; ++i)
+                    for (int i = 0; i < 16; ++i)
                     {
                         if (first)
                         {

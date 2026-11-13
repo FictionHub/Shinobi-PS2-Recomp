@@ -20,6 +20,18 @@ namespace launcher
                                {"l1", "Q"},          {"r1", "E"},            {"l2", "LEFT_SHIFT"}, {"r2", "RIGHT_SHIFT"},
                                {"start", "ENTER"},   {"select", "TAB"},
                                {"camera_up", "I"},   {"camera_down", "K"},   {"camera_left", "J"}, {"camera_right", "L"}};
+        // LOCAL PATCH (controller remapping): the game buttons; [controls] pad_<name> = the controller button that presses it.
+        const char *const kPadButtons[] = {"up", "down", "left", "right", "cross", "circle", "square", "triangle",
+                                           "l1", "r1", "l2", "r2", "start", "select", "l3", "r3"};
+        bool padName(const std::string &v)
+        {
+            if (v == "none")
+                return true;
+            for (const char *n : kPadButtons)
+                if (v == n)
+                    return true;
+            return false;
+        }
     }
 
     bool truthy(const std::string &v)
@@ -87,11 +99,27 @@ namespace launcher
            << ",upfix:" << b(get("video", "upscale_fixes", "on") != "off")
            << ",ovl:" << b(truthy(get("performance", "stats_overlay", "false")))
            << ",cam:" << b(truthy(get("game", "close_camera", "false")))
+           << ",hud:" << b(truthy(get("game", "hide_hud", "false")))
            << ",scarf:" << jsonString(scarfColour(get("game", "scarf_color", "original")))
            << ",win:" << jsonString(get("video", "window", "borderless"))
            << ",haptics:" << b(truthy(get("input", "haptics", "true")))
            << ",hapStr:" << std::clamp((std::atoi(get("input", "haptic_strength", "100").c_str()) + 5) / 10, 1, 10)
-           << ",trig:" << b(truthy(get("input", "trigger_resistance", "true"))) << "},binds:{";
+           << ",trig:" << b(truthy(get("input", "trigger_resistance", "true")))
+           << ",invX:" << b(truthy(get("input", "invert_camera_x", "false")))
+           << ",invY:" << b(truthy(get("input", "invert_camera_y", "false"))) << "},pbinds:{";
+        {
+            bool firstPad = true;
+            for (const char *name : kPadButtons)
+            {
+                const std::string padKey = std::string("pad_") + name;
+                std::string v = get("controls", padKey.c_str(), name);
+                if (!padName(v))
+                    v = name;
+                js << (firstPad ? "" : ",") << name << ":" << jsonString(v);
+                firstPad = false;
+            }
+        }
+        js << "},binds:{";
         bool first = true;
         for (const Bind &bind : kBinds)
         {
@@ -150,6 +178,7 @@ namespace launcher
             set("video", "upscale_fixes", get("upfix", "1") == "1" ? "on" : "off");
             set("performance", "stats_overlay", b(get("ovl", "0") == "1"));
             set("game", "close_camera", b(get("cam", "0") == "1"));
+            set("game", "hide_hud", b(get("hud", "0") == "1"));
         }
         // LOCAL PATCH (mod): Hotsuma's scarf colour, "original" or #rrggbb.
         {
@@ -176,6 +205,14 @@ namespace launcher
         set("input", "haptics", b(get("haptics", "1") == "1"));
         set("input", "haptic_strength", std::to_string(std::clamp(std::atoi(get("hapStr", "10").c_str()), 1, 10) * 10));
         set("input", "trigger_resistance", b(get("trig", "1") == "1"));
+        set("input", "invert_camera_x", b(get("invX", "0") == "1"));
+        set("input", "invert_camera_y", b(get("invY", "0") == "1"));
+        for (const char *name : kPadButtons)
+        {
+            const auto it = v.find(std::string("pbind.") + name);
+            if (it != v.end() && padName(it->second))
+                set("controls", (std::string("pad_") + name).c_str(), it->second);
+        }
         set("performance", "fast_vu", get("mod.fastvu", "0") == "1" ? "on" : "off");
         set("performance", "show_fps", b(get("mod.dbg", "0") == "1"));
         set("audio", "sound_chip", get("mod.legacy", "0") == "1" ? "legacy" : "pcsx2");
