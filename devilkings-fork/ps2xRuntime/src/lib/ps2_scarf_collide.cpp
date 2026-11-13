@@ -8,7 +8,7 @@
 // position, +0xB8), sized from that height so the game's units do not matter; a point inside is moved out to its
 // surface and the part of its velocity going into the body is removed. The first points of each strand sit at the neck
 // and are left alone, the push fades in over the next ones. [game] scarf_collision (Effects tab).
-// PS2X_SCARF_RADIUS=<fraction of the height> tunes the capsule (0.10 by default).
+// PS2X_SCARF_RADIUS=<fraction of the height> tunes the capsule (0.075 by default). Torso only (neck to hips).
 
 #include "runtime/ps2_settings.h"
 #include "ps2_runtime.h"
@@ -95,8 +95,8 @@ void ps2xScarfCollide(uint8_t *rdram, uint32_t muffler)
     const float height = std::sqrt(height2);
     static const float s_fraction = [] {
         const char *e = std::getenv("PS2X_SCARF_RADIUS");
-        const float f = e ? static_cast<float>(std::atof(e)) : 0.10f;
-        return f > 0.0f && f < 0.5f ? f : 0.10f;
+        const float f = e ? static_cast<float>(std::atof(e)) : 0.075f;
+        return f > 0.0f && f < 0.5f ? f : 0.075f;
     }();
     const float radius = height * s_fraction;
 
@@ -110,7 +110,12 @@ void ps2xScarfCollide(uint8_t *rdram, uint32_t muffler)
             // Closest point of the body's axis (below the neck itself, so the attachment is never pushed).
             const float rel[3] = {p[0] - neck[0], p[1] - neck[1], p[2] - neck[2]};
             float t = (rel[0] * axis[0] + rel[1] * axis[1] + rel[2] * axis[2]) / height2;
-            t = std::clamp(t, 0.06f, 1.0f);
+            // Only the torso: from just under the neck down to the hips (about 45% of the way to the feet). Below the hips
+            // nothing is pushed, so the scarf hangs and trails freely as in the original game (a capsule down to the feet
+            // made the whole scarf a wide skirt around the legs).
+            if (t > 0.48f)
+                continue;
+            t = std::clamp(t, 0.06f, 0.45f);
             const float c[3] = {neck[0] + axis[0] * t, neck[1] + axis[1] * t, neck[2] + axis[2] * t};
             float d[3] = {p[0] - c[0], p[1] - c[1], p[2] - c[2]};
             const float len = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
