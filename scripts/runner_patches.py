@@ -228,3 +228,186 @@ if 'ps2xSwordHungerOff' not in raw:
         write(path, t, nl)
         done = 1
 print('no sword hunger hook added:', done, '(0 = already done)')
+
+# ---- 7. (research) HyScreen settings logged when they change (ps2xScreenTrace in ps2_hud_mod.cpp), at the start of
+# HyScreen::_settingToEnvironment.
+path = os.path.join(D, '_settingToEnvironment__8HyScreenFv_0x3322c0.cpp')
+raw = read(path)
+if 'ps2xScreenTrace' not in raw:
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    m = re.search(r'\n    ctx->pc = 0x3322C0u;\n', t)
+    if m:
+        t = t[:m.end()] + '    { extern void ps2xScreenTrace(const uint8_t *, uint32_t); ps2xScreenTrace(rdram, GPR_U32(ctx, 4)); }\n' + t[m.end():]
+        write(path, t, nl)
+        print('screen trace hook added')
+
+# ---- 8. Cinematic bars mod: movies and story cutscenes keep their bars (the picture never covers them, so removing
+# them shows leftover memory under the subtitles). Their Draw functions mark "keep bars" (ps2xKeepBarsMark in
+# ps2_hud_mod.cpp); the GS-level filter (gs_bars.cpp) leaves bars alone while that mark is recent.
+for name, pc in (('Draw__9movieTaskFv_0x242280.cpp', '0x242280u'), ('Draw__10TitleMovieFv_0x2416a0.cpp', '0x2416A0u'),
+                 ('Draw__12cEventPlayerFv_0x2ffce0.cpp', '0x2FFCE0u')):
+    path = os.path.join(D, name)
+    raw = read(path)
+    if 'ps2xKeepBarsMark' in raw:
+        continue
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    m = re.search(r'\n    ctx->pc = ' + pc + r';\n', t, re.I)
+    if m:
+        t = t[:m.end()] + '    { extern void ps2xKeepBarsMark(); ps2xKeepBarsMark(); } // LOCAL PATCH (cinematic bars mod)\n' + t[m.end():]
+        write(path, t, nl)
+        print('keep-bars mark added:', name)
+    else:
+        print('keep-bars mark NOT added (pattern missing):', name)
+
+# ---- 9. Cinematic bars mod: the TATE camera's bars are Ml_TexScreen / Ml_TexScreenPT effects; their Draw returns at
+# once while ps2xTexScreenIsBar (ps2_hud_mod.cpp) says the effect is a full-width strip and the mod is on.
+for name, pc in (('Draw__12Ml_TexScreenFv_0x3b1650.cpp', '3B1650'), ('Draw__14Ml_TexScreenPTFv_0x3b8d30.cpp', '3B8D30')):
+    path = os.path.join(D, name)
+    raw = read(path)
+    if 'ps2xTexScreenIsBar' in raw:
+        continue
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    m = re.search(r'\n    ctx->pc = 0x' + pc + r'u;\n', t, re.I)
+    if not m:
+        print('TexScreen hook NOT added (pattern missing):', name)
+        continue
+    hook = ('    // LOCAL PATCH (cinematic bars mod): a TATE bar is not drawn.\n'
+            '    {\n'
+            '        extern bool ps2xTexScreenIsBar(const uint8_t *, uint32_t);\n'
+            '        if (ps2xTexScreenIsBar(rdram, GPR_U32(ctx, 4)))\n'
+            '        {\n'
+            '            ctx->pc = GPR_U32(ctx, 31);\n'
+            '            return;\n'
+            '        }\n'
+            '    }\n')
+    write(path, t[:m.end()] + hook + t[m.end():], nl)
+    print('TexScreen hook added:', name)
+
+# ---- 10. Fair final boss mod (ps2_fair_boss.cpp; how the fight works: reference/hiruko_boss.md). Each hook is a line of
+# code put just before one instruction of Hiruko's (CEc380) or the talismans' (CEc225) code and does nothing while
+# [game] fair_final_boss is off.
+FAIR_DECL = 'bool ps2xFairBoss(); // ps2_fair_boss.cpp (LOCAL PATCH: fair final boss mod)\n'
+
+
+def fair_hook(fname, before_pc, code, marker):
+    """Put `code` just before the instruction at `before_pc` (after its label, so jumps to it run it too)."""
+    path = os.path.join(D, fname)
+    raw = read(path)
+    if marker in raw:
+        return 0
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    anchor = '\n    // 0x%x: ' % before_pc
+    if t.count(anchor) != 1:
+        print('fair boss: anchor 0x%x not found once in %s (%d)' % (before_pc, fname, t.count(anchor)))
+        return 0
+    k = t.index(anchor) + 1
+    t = t[:k] + code + t[k:]
+    if FAIR_DECL not in t:
+        f = t.find('\nvoid ')
+        t = t[:f + 1] + FAIR_DECL + t[f + 1:]
+    write(path, t, nl)
+    return 1
+
+
+def fair_call_arg(fname, target, call_pc, code, marker):
+    """Put `code` just before the call (jal) at `call_pc` to `target` is made (its delay slot has already run)."""
+    path = os.path.join(D, fname)
+    raw = read(path)
+    if marker in raw:
+        return 0
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    anchor = '    if (!runtime->dispatchGuestBranch(rdram, ctx, 0x%Xu, 0x%Xu, ' % (target, call_pc)
+    if t.count(anchor) != 1:
+        print('fair boss: call 0x%x at 0x%x not found once in %s (%d)' % (target, call_pc, fname, t.count(anchor)))
+        return 0
+    k = t.index(anchor)
+    t = t[:k] + code + t[k:]
+    if FAIR_DECL not in t:
+        f = t.find('\nvoid ')
+        t = t[:f + 1] + FAIR_DECL + t[f + 1:]
+    write(path, t, nl)
+    return 1
+
+
+KB = 'KNOCK_BACK__15CEc380AnimationFii_0x319540.cpp'
+DMG = 'Damage__6CEc380FP7IzPointP10SPowerData_0x317fc0.cpp'
+MAIN = 'Main__6CEc380Fv_0x3178b0.cpp'
+TP = 'Teleport__15CEc380AnimationFv_0x319c10.cpp'
+TAUNT = 'TAUNT__15CEc380AnimationFii_0x318240.cpp'
+IDLE2 = 'IDLE2__15CEc380AnimationFii_0x318570.cpp'
+TALISMAN = 'ATTACK02__15CEc225AnimationFii_0x3ccc80.cpp'
+SET_LOCK_OK, SET_DAMAGE_OK = 0x25B360, 0x252870
+n = 0
+# 1. Seals: the hit counter (+0xC6) jumps to the count that opens the seal (3, then 7) on the first counted hit.
+n += fair_hook(KB, 0x319630,
+               '    if (ps2xFairBoss()) { SET_GPR_U32(ctx, 2, 3u); WRITE16(ADD32(GPR_U32(ctx, 17), 198), 3u); } // LOCAL PATCH (fair boss 1a)\n',
+               'fair boss 1a')
+n += fair_hook(KB, 0x3197d0,
+               '    if (ps2xFairBoss()) { SET_GPR_U32(ctx, 2, 7u); WRITE16(ADD32(GPR_U32(ctx, 17), 198), 7u); } // LOCAL PATCH (fair boss 1b)\n',
+               'fair boss 1b')
+# 2. No parry before the real fight: the hit's attack type (SPowerData+0xD) reads as a guard-breaking one.
+n += fair_hook(DMG, 0x317fdc,
+               '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 2, 1u); // LOCAL PATCH (fair boss 2)\n',
+               'fair boss 2')
+# 3. No guard against slashes while idle in the real fight: his guard-break level (+0x515) reads as broken.
+n += fair_hook(MAIN, 0x317e1c,
+               '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 3, 2u); // LOCAL PATCH (fair boss 3)\n',
+               'fair boss 3')
+# 8. Talismans come back twice as fast (the respawn timer's limit, performance +0xAC, halved).
+n += fair_hook(MAIN, 0x317db4,
+               '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 3, GPR_U32(ctx, 3) / 2u); // LOCAL PATCH (fair boss 8)\n',
+               'fair boss 8')
+# Hiruko is on the stage (for 7): marked every frame from his Main.
+n += fair_hook(MAIN, 0x3178b0,
+               '    { extern void ps2xHirukoMark(); ps2xHirukoMark(); } // LOCAL PATCH (fair boss: Hiruko seen)\n',
+               'fair boss: Hiruko seen')
+# 4. Ground spots only in the real fight: the random pick's upper end (19) becomes 13 (spots 10-13 stand on the floor).
+n += fair_hook(TP, 0x319c74,
+               '    if (ps2xFairBoss() && GPR_U32(ctx, 5) == 19u) SET_GPR_U32(ctx, 5, 13u); // LOCAL PATCH (fair boss 4)\n',
+               'fair boss 4')
+# 5 + 6. While he laughs: hittable and lockable. While he fades out to teleport: still lockable (damage stays off).
+for pc in (0x3182AC, 0x318378):
+    n += fair_call_arg(TAUNT, SET_LOCK_OK, pc,
+                       '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 5, 1u); // LOCAL PATCH (fair boss 6 @%x)\n' % pc,
+                       'fair boss 6 @%x' % pc)
+for pc in (0x3182B8, 0x318384):
+    n += fair_call_arg(TAUNT, SET_DAMAGE_OK, pc,
+                       '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 5, 1u); // LOCAL PATCH (fair boss 5 @%x)\n' % pc,
+                       'fair boss 5 @%x' % pc)
+n += fair_call_arg(IDLE2, SET_LOCK_OK, 0x3185D8,
+                   '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 5, 1u); // LOCAL PATCH (fair boss 6 @3185d8)\n',
+                   'fair boss 6 @3185d8')
+# 7. A talisman that blows itself up counts as killed: just after its blast is made (before action 0x25 is set).
+n += fair_hook(TALISMAN, 0x3ccda4,
+               '    { extern void ps2xFairBossTalismanBlast(uint8_t *, R5900Context *, PS2Runtime *, uint32_t);\n'
+               '      ps2xFairBossTalismanBlast(rdram, ctx, runtime, READ32(ADD32(GPR_U32(ctx, 16), 168))); } // LOCAL PATCH (fair boss 7)\n',
+               'fair boss 7')
+# 9. Hittable while he fades out and back in to teleport (IDLE2's SetDamageOk(0) / SetHitOk(0) become 1).
+for pc, target in ((0x3185E4, SET_DAMAGE_OK), (0x3185F0, 0x252880)):
+    n += fair_call_arg(IDLE2, target, pc,
+                       '    if (ps2xFairBoss()) SET_GPR_U32(ctx, 5, 1u); // LOCAL PATCH (fair boss 9 @%x)\n' % pc,
+                       'fair boss 9 @%x' % pc)
+# 9b. A hit during the fade ends IDLE2 early, so its own clean-up (constant material off, alpha 1) never runs: do it
+# when the hit lands, or he stays see-through. CObjectBase +0x410 constant material, +0x414 its alpha flag, +0x420 alpha.
+n += fair_hook(DMG, 0x317fc0,
+               '    if (ps2xFairBoss() && READ32(ADD32(GPR_U32(ctx, 4), 0x410))) { WRITE32(ADD32(GPR_U32(ctx, 4), 0x410), 0u);'
+               ' WRITE32(ADD32(GPR_U32(ctx, 4), 0x414), 0u); WRITE32(ADD32(GPR_U32(ctx, 4), 0x420), 0x3F800000u); }'
+               ' // LOCAL PATCH (fair boss 9b)\n',
+               'fair boss 9b')
+print('fair final boss hooks added:', n, '(0 = already done; 16 on a fresh runner)')
+
+# ---- 11. Infinite health mod (ps2_hud_mod.cpp ps2xInfiniteHealth, [game] infinite_health). CPlayer::Damage (0x24e010)
+# subtracts the hit's damage from the health (+0x32C) from 0x24e1c8 on. Just before that, while the mod is on, it ends the
+# way it does for a hit the game ignores (label 0x24e588: returns 3 = "no effect"), so no hit costs health. The floor
+# damage and the other hit routes reach this same function through its virtual call.
+DMG_PLAYER = 'Damage__7CPlayerFP7IzPointP10SPowerData_0x24e010.cpp'
+n = fair_hook(DMG_PLAYER, 0x24E1A4,
+              '    { extern bool ps2xInfiniteHealth(); if (ps2xInfiniteHealth()) goto label_24e588; } // LOCAL PATCH (infinite health)'+chr(10),
+              'LOCAL PATCH (infinite health)')
+print('infinite health hook added:', n, '(0 = already done)')
+

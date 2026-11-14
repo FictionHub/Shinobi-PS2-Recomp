@@ -148,10 +148,20 @@ I didn't want "rumble". I wanted it to feel like a modern PS5 game, so I built i
 | **F1** (or Select+Start) | Menu: settings, mods and controller, all live (pauses the game) |
 | **F2** | Performance overlay |
 | **F3** | Close-up camera |
-| **F4** | Your game manual (open your PDF once in the launcher) |
+| **F4** | Frame generation |
+| **F5** | Hide HUD |
+| **F6** | Low latency |
+| **F7** | IMAX mode (no black bars in TATE finishing moves) |
+| **F8** | Infinite health |
+| **F9** | Fair final boss |
+| **Shift+F6** | Unlock everything |
+| **Shift+F7** | No sword hunger |
+| **Shift+F8** | Remove scarf |
+| **Shift+F9** | Scarf body collision |
+| **F10** | Mouse camera on / off |
 | **Alt+Enter / F11** | Window or full screen |
 
-Pressing F2 or F3 slides a little notice down in the corner, so you know it's on or off.
+Pressing any of these slides a little notice down in the corner, so you know it's on or off.
 
 ### Fixes
 
@@ -209,7 +219,7 @@ Everything can be changed in **Configure Controller** (and the in-game menu, F1)
 
 - **Mouse:** moves the camera; left click = Square, right click = Circle; **F10** switches it on and off.
 - **Controllers:** DualSense, DualSense Edge, DualShock 4 and Xbox (360, One, Series) use the standard layout. The DualSense Edge is the one tested; is a controller not working for you? Let me know.
-- **In game:** F1 or Select+Start = menu (pauses), F2 = performance overlay, F3 = close-up camera, F4 = your manual, Alt+Enter or F11 = window / full screen, F8 = mark a problem in the log.
+- **In game:** F1 or Select+Start = menu (pauses), F2 = performance overlay, F3 = close-up camera, F4 = frame generation, F5-F9 and Shift+F6-F9 = mods (see the table above), Alt+Enter or F11 = window / full screen, Ctrl+F8 = mark a problem in the log.
 
 ## Saves
 

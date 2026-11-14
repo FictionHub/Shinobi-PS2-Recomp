@@ -60,18 +60,27 @@
       },
       "new": {
         "video/renderer": "pcsx2",
-        "video/render_scale": "3",
+        "video/render_scale": "4",
         "video/pcsx2_renderer": "d3d11",
         "video/fps_target": "60",
         "video/aspect": "16:9",
         "video/vsync": "true",
         "video/anisotropic": "2",
         "video/sharpening": "20",
-        "video/antialias": "false",
+        "video/antialias": "true",
         "video/edge_aa": "false",
         "video/window": "borderless",
         "audio/stereo_repair": "copy_left",
-        "saves/memcard_folder": "../saves/mc0"
+        "saves/memcard_folder": "../saves/mc0",
+        "video/frame_generation": "false",
+        "video/low_latency": "true",
+        "performance/stats_overlay": "true",
+        "game/hide_cinema_bars": "true",
+        "game/fair_final_boss": "true",
+        "game/scarf_collision": "false",
+        "game/skip_intro": "true",
+        "game/studio_intro": "false",
+        "game/scarf_color": "original"
       }
     }
   ],
@@ -119,7 +128,7 @@
         }
       ],
       "defaults": {
-        "video/render_scale": "3"
+        "video/render_scale": "4"
       }
     },
     {
@@ -308,7 +317,7 @@
         }
       ],
       "defaults": {
-        "video/antialias": "false",
+        "video/antialias": "true",
         "video/edge_aa": "false"
       }
     },
@@ -419,7 +428,7 @@
         }
       ],
       "defaults": {
-        "performance/stats_overlay": "false"
+        "performance/stats_overlay": "true"
       }
     }
   ]

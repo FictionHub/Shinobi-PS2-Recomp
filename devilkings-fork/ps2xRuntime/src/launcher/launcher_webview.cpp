@@ -66,6 +66,7 @@ namespace
     ComPtr<ICoreWebView2Controller> g_controller;
     ComPtr<ICoreWebView2> g_view;
     HANDLE g_gameProcess = nullptr;
+    bool g_webviewMissing = false; // WebView2 could not start: the window closes and runSimple() takes over
     DWORD g_gamePid = 0;
     bool g_reportedRunning = false;
     std::wstring g_shotPath;  // SHINOBI_LAUNCHER_SHOT test hook
@@ -122,6 +123,170 @@ namespace
     std::mutex g_unpackMutex;
     std::thread g_unpackThread;
 
+    // Running on Linux or a Steam Deck through Wine/Proton.
+    bool underWine()
+    {
+        return GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "wine_get_version") != nullptr;
+    }
+
+    // Unzips `zip` into `folder` with the zlib1.dll shipped in bin, for when Windows' tar.exe is not there (Wine/Proton
+    // has none). Stored and deflated entries; every file's CRC is checked and it is written under a temporary name first.
+    bool unzipWithZlib(const fs::path &zip, const fs::path &folder)
+    {
+        struct ZStream
+        {
+            const unsigned char *next_in; unsigned avail_in; unsigned long total_in;
+            unsigned char *next_out; unsigned avail_out; unsigned long total_out;
+            const char *msg; void *state; void *zalloc; void *zfree; void *opaque;
+            int data_type; unsigned long adler; unsigned long reserved;
+        };
+        using InflateInit2 = int (*)(ZStream *, int, const char *, int);
+        using Inflate = int (*)(ZStream *, int);
+        using InflateEnd = int (*)(ZStream *);
+        using Version = const char *(*)();
+        using Crc32 = unsigned long (*)(unsigned long, const unsigned char *, unsigned);
+        HMODULE z = LoadLibraryW((folder / "zlib1.dll").wstring().c_str());
+        if (!z)
+            return false;
+        const auto init = reinterpret_cast<InflateInit2>(GetProcAddress(z, "inflateInit2_"));
+        const auto inflate = reinterpret_cast<Inflate>(GetProcAddress(z, "inflate"));
+        const auto end = reinterpret_cast<InflateEnd>(GetProcAddress(z, "inflateEnd"));
+        const auto version = reinterpret_cast<Version>(GetProcAddress(z, "zlibVersion"));
+        const auto crc32 = reinterpret_cast<Crc32>(GetProcAddress(z, "crc32"));
+        bool ok = false;
+        std::ifstream in(zip, std::ios::binary);
+        if (init && inflate && end && version && crc32 && in)
+        {
+            auto u16 = [](const unsigned char *p) { return static_cast<uint32_t>(p[0] | (p[1] << 8)); };
+            auto u32 = [](const unsigned char *p) { return static_cast<uint32_t>(p[0] | (p[1] << 8) | (p[2] << 16)) | (static_cast<uint32_t>(p[3]) << 24); };
+            in.seekg(0, std::ios::end);
+            const uint64_t length = static_cast<uint64_t>(in.tellg());
+            const uint64_t tailSize = std::min<uint64_t>(length, 65557);
+            std::vector<unsigned char> tail(static_cast<size_t>(tailSize));
+            in.seekg(static_cast<std::streamoff>(length - tailSize));
+            in.read(reinterpret_cast<char *>(tail.data()), static_cast<std::streamsize>(tail.size()));
+            size_t eocd = std::string::npos;
+            for (size_t i = tail.size() >= 22 ? tail.size() - 22 : 0; i != static_cast<size_t>(-1); --i)
+                if (u32(&tail[i]) == 0x06054b50u)
+                {
+                    eocd = i;
+                    break;
+                }
+            if (eocd != std::string::npos)
+            {
+                const uint32_t count = u16(&tail[eocd + 10]);
+                const uint32_t dirSize = u32(&tail[eocd + 12]);
+                const uint32_t dirOffset = u32(&tail[eocd + 16]);
+                std::vector<unsigned char> dir(dirSize);
+                in.clear();
+                in.seekg(dirOffset);
+                in.read(reinterpret_cast<char *>(dir.data()), dirSize);
+                ok = static_cast<bool>(in);
+                size_t at = 0;
+                std::vector<unsigned char> inBuf(1u << 20), outBuf(1u << 20);
+                for (uint32_t n = 0; ok && n < count; ++n)
+                {
+                    if (at + 46 > dir.size() || u32(&dir[at]) != 0x02014b50u)
+                    {
+                        ok = false;
+                        break;
+                    }
+                    const uint32_t method = u16(&dir[at + 10]), crc = u32(&dir[at + 16]);
+                    const uint32_t packed = u32(&dir[at + 20]), size = u32(&dir[at + 24]);
+                    const uint32_t nameLen = u16(&dir[at + 28]), extraLen = u16(&dir[at + 30]), commentLen = u16(&dir[at + 32]);
+                    const uint32_t local = u32(&dir[at + 42]);
+                    const std::string name(reinterpret_cast<const char *>(&dir[at + 46]), nameLen);
+                    at += 46 + nameLen + extraLen + commentLen;
+                    if (name.empty() || name.find("..") != std::string::npos || name[0] == '/' || name[0] == '\\')
+                    {
+                        ok = false;
+                        break;
+                    }
+                    const fs::path target = folder / fs::path(name);
+                    std::error_code ec;
+                    if (name.back() == '/')
+                    {
+                        fs::create_directories(target, ec);
+                        continue;
+                    }
+                    fs::create_directories(target.parent_path(), ec);
+                    unsigned char header[30];
+                    in.clear();
+                    in.seekg(local);
+                    in.read(reinterpret_cast<char *>(header), 30);
+                    if (!in || u32(header) != 0x04034b50u || (method != 0 && method != 8))
+                    {
+                        ok = false;
+                        break;
+                    }
+                    in.seekg(static_cast<std::streamoff>(local) + 30 + u16(header + 26) + u16(header + 28));
+                    const fs::path temp = target.wstring() + L".unzipping";
+                    std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+                    unsigned long sum = crc32(0, nullptr, 0);
+                    uint64_t written = 0, left = packed;
+                    ZStream s{};
+                    if (method == 8 && init(&s, -15, version(), static_cast<int>(sizeof(ZStream))) != 0)
+                        ok = false;
+                    int status = 0;
+                    while (ok && out && left > 0)
+                    {
+                        const uint32_t now = static_cast<uint32_t>(std::min<uint64_t>(left, inBuf.size()));
+                        in.read(reinterpret_cast<char *>(inBuf.data()), now);
+                        if (!in)
+                        {
+                            ok = false;
+                            break;
+                        }
+                        left -= now;
+                        if (method == 0)
+                        {
+                            out.write(reinterpret_cast<const char *>(inBuf.data()), now);
+                            sum = crc32(sum, inBuf.data(), now);
+                            written += now;
+                            continue;
+                        }
+                        s.next_in = inBuf.data();
+                        s.avail_in = now;
+                        do
+                        {
+                            s.next_out = outBuf.data();
+                            s.avail_out = static_cast<unsigned>(outBuf.size());
+                            status = inflate(&s, 0);
+                            if (status != 0 && status != 1)
+                            {
+                                ok = false;
+                                break;
+                            }
+                            const unsigned got = static_cast<unsigned>(outBuf.size()) - s.avail_out;
+                            out.write(reinterpret_cast<const char *>(outBuf.data()), got);
+                            sum = crc32(sum, outBuf.data(), got);
+                            written += got;
+                        } while (s.avail_out == 0 && status != 1);
+                    }
+                    if (method == 8)
+                        end(&s);
+                    out.close();
+                    if (!ok || !out || written != size || sum != crc)
+                    {
+                        ok = false;
+                        fs::remove(temp, ec);
+                        break;
+                    }
+                    fs::rename(temp, target, ec);
+                    if (ec)
+                    {
+                        fs::remove(target, ec);
+                        fs::rename(temp, target, ec);
+                        ok = !ec;
+                    }
+                }
+            }
+        }
+        FreeLibrary(z);
+        std::fprintf(stderr, "[launcher] unpacked %s with zlib1.dll: %s\n", zip.string().c_str(), ok ? "ok" : "FAILED");
+        return ok;
+    }
+
     bool unpackGameProgram()
     {
         std::lock_guard<std::mutex> lock(g_unpackMutex);
@@ -158,18 +323,21 @@ namespace
         STARTUPINFOW info{};
         info.cb = sizeof(info);
         PROCESS_INFORMATION process{};
+        DWORD code = 1;
         if (CreateProcessW(nullptr, unpack.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &info, &process))
         {
             WaitForSingleObject(process.hProcess, 180000);
-            DWORD code = 1;
             GetExitCodeProcess(process.hProcess, &code);
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
-            if (code == 0 && !stamp.empty())
-            {
-                std::ofstream out(marker, std::ios::trunc);
-                out << stamp << "\n";
-            }
+        }
+        // No tar.exe (Wine/Proton, old Windows 10) or it failed: unzip it ourselves with bin's zlib1.dll.
+        if (code != 0 && unzipWithZlib(packed, g_runner.parent_path()))
+            code = 0;
+        if (code == 0 && !stamp.empty())
+        {
+            std::ofstream out(marker, std::ios::trunc);
+            out << stamp << "\n";
         }
         return fs::exists(g_runner, ec);
     }
@@ -719,10 +887,8 @@ namespace
                 [init](HRESULT result, ICoreWebView2Environment *env) -> HRESULT {
                     if (FAILED(result) || !env)
                     {
-                        MessageBoxW(g_hwnd,
-                                    L"Microsoft Edge WebView2 Runtime is needed for the launcher.\n"
-                                    L"It comes with Windows 11; on Windows 10 install it from microsoft.com.",
-                                    L"Shinobi Launcher", MB_ICONERROR);
+                        // No WebView2 (a Windows 10 without it): the game still starts, through runSimple().
+                        g_webviewMissing = true;
                         PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
                         return S_OK;
                     }
@@ -788,6 +954,122 @@ namespace
                                     .Get());
                 })
                 .Get());
+    }
+
+    // No settings.ini yet (never saved from the launcher): the launcher's defaults, so the game does not start on its own
+    // built-in ones. Only keys the file does not have yet are written.
+    void writeDefaultSettings()
+    {
+        if (fs::exists(g_gameDir / "settings.ini") && !g_game.get("video", "window", "").empty())
+            return;
+        const char *defaults[][3] = {{"video", "renderer", "pcsx2"},       {"video", "render_scale", "4"},
+                                     {"video", "pcsx2_renderer", "d3d11"}, {"video", "fps_target", "60"},
+                                     {"video", "aspect", "16:9"},          {"video", "vsync", "true"},
+                                     {"video", "anisotropic", "2"},        {"video", "sharpening", "20"},
+                                     {"video", "antialias", "true"},      {"video", "edge_aa", "false"}, {"video", "window", "borderless"},
+                                     {"audio", "stereo_repair", "copy_left"}, {"saves", "memcard_folder", "../saves/mc0"},
+                                     {"video", "frame_generation", "false"}, {"video", "low_latency", "true"},
+                                     {"performance", "stats_overlay", "true"}, {"game", "hide_cinema_bars", "true"},
+                                     {"game", "fair_final_boss", "true"}, {"game", "scarf_collision", "false"},
+                                     {"game", "skip_intro", "true"}, {"game", "studio_intro", "false"},
+                                     {"game", "scarf_color", "original"}};
+        for (const auto &d : defaults)
+            if (g_game.get(d[0], d[1], "").empty())
+                g_game.set(d[0], d[1], d[2]);
+        g_game.save((g_gameDir / "settings.ini").string());
+    }
+
+    // Starts the game and waits for it to close; its exit code, or -1 when it could not start (the reason is shown).
+    int playAndWait()
+    {
+        writeDefaultSettings();
+        std::string error;
+        if (!startGame(error))
+        {
+            MessageBoxW(nullptr, widen(error).c_str(), L"Shinobi", MB_ICONERROR);
+            return -1;
+        }
+        WaitForSingleObject(g_gameProcess, INFINITE);
+        DWORD code = 0;
+        GetExitCodeProcess(g_gameProcess, &code);
+        CloseHandle(g_gameProcess);
+        g_gameProcess = nullptr;
+        return static_cast<int>(code);
+    }
+
+    // The launcher without its window, for Wine/Proton (Linux, Steam Deck), where the WebView2 page does not work, and
+    // for a Windows without WebView2: the first time it asks for the disc image and copies the game's files out of it
+    // (a small progress box), then it starts the game. Settings are changed in game (Mod Menu) or in game/settings.ini.
+    int runSimple()
+    {
+        unpackGameProgram();
+        if (!gameInstalled())
+        {
+            fs::path image = fs::path(widen(g_mine.get("game", "iso", "")));
+            std::error_code ec;
+            for (;;)
+            {
+                if (image.empty() || !fs::exists(image, ec))
+                {
+                    if (MessageBoxW(nullptr,
+                                    L"First start: choose your disc image (.iso) of Shinobi for PlayStation 2, USA release "
+                                    L"(SLUS-20459).\n\nThe game's files (about 1.2 GB) are copied out of it once.",
+                                    L"Shinobi", MB_OKCANCEL | MB_ICONINFORMATION) != IDOK)
+                        return 1;
+                    image = browseForImage();
+                    if (image.empty())
+                        return 1;
+                }
+                const launcher::iso::Check check = launcher::iso::check(image, kBootFile);
+                if (check.ok)
+                    break;
+                MessageBoxW(nullptr, widen(check.message).c_str(), L"Shinobi", MB_ICONWARNING);
+                image.clear();
+            }
+            g_mine.set("game", "iso", narrow(image.wstring()));
+            g_mine.save((g_root / "launcher.ini").string());
+
+            const int w = 460, h = 90;
+            HWND box = CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"Copying the game's files...",
+                                       WS_POPUP | WS_CAPTION | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+                                       (GetSystemMetrics(SM_CXSCREEN) - w) / 2, (GetSystemMetrics(SM_CYSCREEN) - h) / 2, w, h,
+                                       nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+            std::atomic<int> percent{0};
+            std::atomic<bool> done{false};
+            std::string error;
+            std::thread copy([&]() {
+                error = launcher::iso::extractAll(image, g_gameDir, [&](int p, const std::string &) {
+                    percent = p;
+                    return true;
+                });
+                done = true;
+            });
+            int shown = -1;
+            while (!done)
+            {
+                MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
+                MSG m;
+                while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(&m);
+                    DispatchMessageW(&m);
+                }
+                if (box && percent != shown)
+                {
+                    shown = percent;
+                    SetWindowTextW(box, (L"Copying the game's files from your disc image... " + std::to_wstring(shown) + L"%").c_str());
+                }
+            }
+            copy.join();
+            if (box)
+                DestroyWindow(box);
+            if (!error.empty())
+            {
+                MessageBoxW(nullptr, widen(error).c_str(), L"Shinobi", MB_ICONERROR);
+                return 4;
+            }
+        }
+        return playAndWait() < 0 ? 5 : 0;
     }
 
     LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -902,7 +1184,29 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             else if (a == L"--play")
                 play = true;
             else if (a == L"--game" && i + 1 < argc)
-                image = argv[++i];
+            {
+                std::wstring p = argv[++i];
+                // Linux (Proton/Wine): RecompLauncher passes a Unix path such as /home/you/Shinobi.iso, which Windows
+                // code reads as \home\you\... on the current drive and cannot open. Turn it into Wine's DOS path (Z:\...).
+                if (p.size() > 1 && p[0] == L'/' && p[1] != L'/')
+                {
+                    using DosName = WCHAR *(__cdecl *)(const char *);
+                    const auto toDos = reinterpret_cast<DosName>(
+                        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "wine_get_dos_file_name"));
+                    WCHAR *dos = toDos ? toDos(narrow(p).c_str()) : nullptr;
+                    if (dos)
+                    {
+                        p = dos;
+                        HeapFree(GetProcessHeap(), 0, dos);
+                    }
+                    else
+                    {
+                        std::replace(p.begin(), p.end(), L'/', L'\\');
+                        p = L"Z:" + p;
+                    }
+                }
+                image = p;
+            }
         }
         if (argv)
             LocalFree(argv);
@@ -950,34 +1254,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         }
         if (play)
         {
-            std::string error;
-            // No settings.ini yet (never saved from the launcher): write the launcher's defaults first, so the game does
-            // not start on its own built-in ones.
-            if (!fs::exists(g_gameDir / "settings.ini") || g_game.get("video", "window", "").empty())
-            {
-                const char *defaults[][3] = {{"video", "renderer", "pcsx2"},       {"video", "render_scale", "3"},
-                                             {"video", "pcsx2_renderer", "d3d11"}, {"video", "fps_target", "60"},
-                                             {"video", "aspect", "16:9"},          {"video", "vsync", "true"},
-                                             {"video", "anisotropic", "2"},        {"video", "sharpening", "20"},
-                                             {"video", "antialias", "false"},      {"video", "edge_aa", "false"}, {"video", "window", "borderless"},
-                                             {"audio", "stereo_repair", "copy_left"}, {"saves", "memcard_folder", "../saves/mc0"}};
-                for (const auto &d : defaults)
-                    if (g_game.get(d[0], d[1], "").empty()) // only keys the file does not have yet
-                        g_game.set(d[0], d[1], d[2]);
-                g_game.save((g_gameDir / "settings.ini").string());
-            }
-            if (!startGame(error))
-            {
-                MessageBoxW(nullptr, widen(error).c_str(), L"Shinobi", MB_ICONERROR);
-                return 5;
-            }
-            WaitForSingleObject(g_gameProcess, INFINITE);
-            DWORD code = 0;
-            GetExitCodeProcess(g_gameProcess, &code);
-            CloseHandle(g_gameProcess);
-            return static_cast<int>(code);
+            const int code = playAndWait();
+            return code < 0 ? 5 : code;
         }
     }
+
+    // Wine/Proton (Linux, Steam Deck): the WebView2 page does not run there, so no window: set up once, then play.
+    // SHINOBI_LAUNCHER_WEBVIEW=1 tries the normal window anyway.
+    if (underWine() && !_wgetenv(L"SHINOBI_LAUNCHER_WEBVIEW"))
+        return runSimple();
 
     if (g_shotPath.empty())
         g_unpackThread = std::thread([]() { unpackGameProgram(); }); // the zipped game program, unpacked in the background
@@ -1051,6 +1336,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         g_manualThread.join();
     if (g_gameProcess)
         CloseHandle(g_gameProcess);
+    if (g_webviewMissing)
+    {
+        g_hwnd = nullptr;
+        return runSimple();
+    }
     CoUninitialize();
     return 0;
 }

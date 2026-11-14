@@ -1,6 +1,9 @@
 #include "runtime/gs/gs_frontend.h"
 #include "runtime/gs/gs_cpu_backend.h"
 #include "runtime/gs/gs_hud_layout.h"
+#include "runtime/gs/gs_bars.h"
+bool ps2xCinemaBarsHidden(); // ps2_hud_mod.cpp
+bool ps2xKeepBars();         // ps2_hud_mod.cpp: a movie or cutscene is on
 #include "runtime/gs/gs_pgs.h"
 #include "runtime/gs/ps2_gif_arbiter.h"
 #include "ps2_log.h"
@@ -979,6 +982,25 @@ void GS::processGIFPacket(const uint8_t *data, uint32_t sizeBytes)
             hudState.tbp[i] = m_ctx[i].tex0.tbp0;
         }
         data = ps2x::hud::apply(GifArbiter::dispatchingPath(), data, sizeBytes, hudState, m_hudScratch);
+    }
+
+    // LOCAL PATCH (cinematic bars mod): letterbox bands taken out of the drawing (gs_bars.cpp).
+    if (ps2xCinemaBarsHidden() && !ps2xKeepBars())
+    {
+        ps2x::bars::State barsState;
+        barsState.primCtxt = m_primRegister.ctxt;
+        barsState.prmodeCtxt = m_prmodeRegister.ctxt;
+        barsState.prmodeCont = m_prmodecont;
+        barsState.primTme = m_primRegister.tme;
+        barsState.prmodeTme = m_prmodeRegister.tme;
+        for (uint32_t i = 0; i < 2u; ++i)
+        {
+            barsState.ofx[i] = m_ctx[i].xyoffset.ofx;
+            barsState.ofy[i] = m_ctx[i].xyoffset.ofy;
+            barsState.width[i] = m_ctx[i].frame.fbw * 64u;
+        }
+        thread_local std::vector<uint8_t> s_barsScratch;
+        data = ps2x::bars::apply(data, sizeBytes, barsState, s_barsScratch);
     }
 
     if (ps2x::pgs::active())

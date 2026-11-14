@@ -39,6 +39,7 @@
 #include <sstream>
 #include "runtime/ps2_settings.h"
 #include "runtime/ps2_sysstats.h"
+extern "C" void rlDrawRenderBatchActive(void); // raylib rlgl.h: draws the queued shapes and text now
 #include "runtime/ps2_intro_video.h"
 #include "runtime/ps2_ingame_menu.h"
 #include <memory>
@@ -1318,12 +1319,17 @@ static void UpdateStatsTitle(uint64_t currentTick)
     s_start = now;
 }
 
-// LOCAL PATCH: F9 saves the presented frame to captures/f9_t<tick>.png (next to the game) and arms the GS draw trace for
+// LOCAL PATCH (debug, Ctrl+F9 now: F7-F9 are mod hotkeys): saves the presented frame to captures/f9_t<tick>.png (next to the game) and arms the GS draw trace for
 // the next 3 VSyncs; the trace goes to stderr, so launch with stderr redirected (see "Play Shinobi.bat").
+static bool CtrlHeld()
+{
+    return IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+}
+
 static void CaptureOnHotkey(uint64_t currentTick, const uint8_t *rgba, uint32_t width, uint32_t height, uint32_t strideBytes)
 {
 #if !defined(__ANDROID__)
-    if (!IsKeyPressed(KEY_F9) || width == 0u || height == 0u)
+    if (!(IsKeyPressed(KEY_F9) && CtrlHeld()) || width == 0u || height == 0u)
         return;
     std::error_code ec;
     std::filesystem::create_directories("captures", ec);
@@ -1370,12 +1376,12 @@ static void PollMarkHotkey(uint64_t currentTick)
     s_padWasDown = padDown;
     // LOCAL PATCH: F7 records graphics memory and the next 15 seconds of drawing (gs_pcsx2.cpp startCapture), for an
     // effect that draws wrong. Runs on its own thread: the copy waits for the GS thread.
-    if (IsKeyPressed(KEY_F7))
+    if (IsKeyPressed(KEY_F7) && CtrlHeld())
     {
         std::fprintf(stderr, "[capture] F7 at t=%.1f\n", RunSeconds());
         std::thread([]() { ps2x::pcsx2gs::startCapture(15.0); }).detach();
     }
-    if (!IsKeyPressed(KEY_F8) && !padPressed)
+    if (!(IsKeyPressed(KEY_F8) && CtrlHeld()) && !padPressed)
         return;
     extern std::atomic<uint64_t> g_ps2AudioPlayedFrames;
     static int s_marks = 0;
@@ -4679,6 +4685,51 @@ void PS2Runtime::run()
         {
             m_debugUiDrawCallback(*this, m_debugUiUserData);
         }
+        // LOCAL PATCH: PS2X_SCREEN_DUMP_DIR=<folder> saves the whole window as the player sees it (the game, the
+        // performance overlay, hotkey notices, the F1 menu's dimming) every PS2X_SCREEN_DUMP_SECONDS (default 3), as raw
+        // .ppm files written on a worker thread so the game does not stutter (scripts/shots_to_png.py makes PNGs of them).
+        {
+            static const char *s_screenDir = std::getenv("PS2X_SCREEN_DUMP_DIR");
+            if (s_screenDir && *s_screenDir)
+            {
+                static const double s_every = []() {
+                    const char *v = std::getenv("PS2X_SCREEN_DUMP_SECONDS");
+                    return v ? std::max(0.5, std::atof(v)) : 3.0;
+                }();
+                static double s_next = 0.0;
+                static int s_shot = 0;
+                const double now = GetTime();
+                if (now >= s_next)
+                {
+                    s_next = now + s_every;
+                    rlDrawRenderBatchActive(); // raylib queues shapes and text (the overlay, notices) until the frame is shown
+                    Image screen = LoadImageFromScreen(); // the back buffer, finished but not yet shown
+                    if (screen.data && screen.width > 0 && screen.height > 0)
+                    {
+                        const std::string name = std::string(s_screenDir) + "/screen_" + std::to_string(s_shot++) + ".ppm";
+                        std::thread([screen, name]() {
+                            const size_t pixels = static_cast<size_t>(screen.width) * static_cast<size_t>(screen.height);
+                            std::vector<uint8_t> rgb(pixels * 3u);
+                            const uint8_t *rgba = static_cast<const uint8_t *>(screen.data);
+                            for (size_t i = 0; i < pixels; ++i)
+                            {
+                                rgb[i * 3u] = rgba[i * 4u];
+                                rgb[i * 3u + 1u] = rgba[i * 4u + 1u];
+                                rgb[i * 3u + 2u] = rgba[i * 4u + 2u];
+                            }
+                            Image owned = screen;
+                            UnloadImage(owned);
+                            if (FILE *out = std::fopen(name.c_str(), "wb"))
+                            {
+                                std::fprintf(out, "P6\n%d %d\n255\n", screen.width, screen.height);
+                                std::fwrite(rgb.data(), 1u, rgb.size(), out);
+                                std::fclose(out);
+                            }
+                        }).detach();
+                    }
+                }
+            }
+        }
         EndDrawing();
         // LOCAL PATCH: low latency ([video] low_latency). Wait here until the graphics card has really shown this frame,
         // so the driver never queues finished frames ahead of the screen (usually 1-2 frames, 16-33 ms, of delay): the
@@ -4711,7 +4762,7 @@ void PS2Runtime::run()
             ps2xHotkeyToast("Close-up camera", on);
         }
         // LOCAL PATCH: F6 switches low latency (saved).
-        if (IsKeyPressed(KEY_F6))
+        if (IsKeyPressed(KEY_F6) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
         {
             const bool on = !ps2x::settings::getBool("video", "low_latency");
             ps2x::settings::set("video", "low_latency", on ? "true" : "false");
@@ -4726,21 +4777,32 @@ void PS2Runtime::run()
             ps2x::settings::save();
             ps2xHotkeyToast(GetMonitorRefreshRate(GetCurrentMonitor()) < 90 && on ? "Frame generation (needs 90 Hz+)" : "Frame generation", on);
         }
-        // LOCAL PATCH (mod): Shift+F5 hides / shows the cinematic bars (ps2_hud_mod.cpp; saved).
-        if (IsKeyPressed(KEY_F5) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        // LOCAL PATCH (mod): the mod hotkeys, spread over the F keys (saved, so they stay as left). F3 close-up camera and
+        // F4 frame generation / F6 low latency are above; here: F5 HUD, F7 IMAX mode, F8 infinite health, F9 fair final
+        // boss, Shift+F6 unlock everything, Shift+F7 no sword hunger, Shift+F8 remove scarf, Shift+F9 scarf body collision.
+        // Ctrl+F7 / F8 / F9 are the debug captures. (F12 is left alone: Steam takes it for screenshots.)
         {
-            const bool hidden = !ps2x::settings::getBool("game", "hide_cinema_bars");
-            ps2x::settings::set("game", "hide_cinema_bars", hidden ? "true" : "false");
-            ps2x::settings::save();
-            ps2xHotkeyToast("Cinematic bars", !hidden);
-        }
-        // LOCAL PATCH (mod): F5 hides / shows the HUD (ps2_hud_mod.cpp; saved).
-        else if (IsKeyPressed(KEY_F5))
-        {
-            const bool hidden = !ps2x::settings::getBool("game", "hide_hud");
-            ps2x::settings::set("game", "hide_hud", hidden ? "true" : "false");
-            ps2x::settings::save();
-            ps2xHotkeyToast("HUD", !hidden);
+            const bool shiftKey = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+            const bool ctrlKey = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+            auto flip = [](const char *key, const char *label, bool shownAsHidden = false) {
+                const bool on = !ps2x::settings::getBool("game", key);
+                ps2x::settings::set("game", key, on ? "true" : "false");
+                ps2x::settings::save();
+                ps2xHotkeyToast(label, shownAsHidden ? !on : on);
+            };
+            if (!ctrlKey && !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
+            {
+                if (IsKeyPressed(KEY_F5) && !shiftKey)
+                    flip("hide_hud", "HUD", true);
+                if (IsKeyPressed(KEY_F6) && shiftKey)
+                    flip("unlock_all", "Unlock everything");
+                if (IsKeyPressed(KEY_F7))
+                    shiftKey ? flip("no_sword_hunger", "No sword hunger") : flip("hide_cinema_bars", "IMAX mode");
+                if (IsKeyPressed(KEY_F8))
+                    shiftKey ? flip("hide_scarf", "Remove scarf") : flip("infinite_health", "Infinite health");
+                if (IsKeyPressed(KEY_F9))
+                    shiftKey ? flip("scarf_collision", "Scarf body collision") : flip("fair_final_boss", "Fair final boss");
+            }
         }
         // LOCAL PATCH: F2 shows / hides the performance overlay at any time (saved, so it stays as left).
         if (IsKeyPressed(KEY_F2) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))

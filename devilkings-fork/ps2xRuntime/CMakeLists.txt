@@ -410,7 +410,9 @@ add_library(ps2_runtime STATIC
     src/lib/ps2_close_camera.cpp
     src/lib/ps2_estimate_trace.cpp
     src/lib/ps2_hud_mod.cpp
+    src/lib/gs/gs_bars.cpp
     src/lib/ps2_unlocks.cpp
+    src/lib/ps2_fair_boss.cpp
     src/lib/ps2_scarf_collide.cpp
     src/lib/ps2_framegen.cpp
     src/lib/ps2_cri_rna.cpp

@@ -597,9 +597,9 @@ L("""    this.defaults = { res: '1080p', renderer: 'Vulkan', ws: true, vsync: fa
       mods: { intro: true, fps: false, tex: false, dbg: false }
     });""",
   """    // Defaults: the game's own (ps2_settings.cpp) where it has them.
-    this.defaults = { res: '1080p', renderer: 'D3D11', fps: '60', ws: true, wsShape: '16:9', vsync: true, tex: 1, fx: 1, aa: 'Off', msaa: 4, blend: 'basic' };
+    this.defaults = { res: '1440p', renderer: 'D3D11', fps: '60', ws: true, wsShape: '16:9', vsync: true, tex: 1, fx: 1, aa: 'FXAA', msaa: 4, blend: 'basic' };
     this.defBinds = { up: 'UP,W', down: 'DOWN,S', left: 'LEFT,A', right: 'RIGHT,D', cross: 'X,SPACE', circle: 'C,ESCAPE', square: 'Z,KP_0', triangle: 'V,KP_1', l1: 'Q', r1: 'E', l2: 'LEFT_SHIFT', r2: 'RIGHT_SHIFT', start: 'ENTER', select: 'TAB' };
-    this.defMods = { studio: true, nscale: true, rr5fix: false, dropst: false, record: false, intro: false, fastvu: false, dbg: false, full: true, diag: false, legacy: false, k8: false };
+    this.defMods = { studio: false, nscale: true, rr5fix: false, dropst: false, record: false, intro: true, fastvu: false, dbg: false, full: true, diag: false, legacy: false, k8: false };
     const init = window.__launcherInit || null;
     this.manualOnly = !!(init && init.manualOnly);
     const start = Object.assign({}, this.defaults, init ? init.settings : {});
@@ -1458,7 +1458,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('infhealth', s.infhealth ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1499,7 +1499,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, unlockall: !!s.unlockall, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, unlockall: !!s.unlockall, fairboss: !!s.fairboss, infhealth: !!s.infhealth, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
@@ -1577,11 +1577,13 @@ L("""    const modRows = MODS.map((m) => ({""",
   """    const GAME_MODS = [
       ['cam', 'Close-up camera (F3)', 'A closer, over-the-shoulder camera for more intimate combat.', false],
       ['hud', 'Hide HUD (F5)', 'Health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.', false],
-      ['bars', 'Hide cinematic bars (Shift+F5)', 'No black bands in the TATE kill camera and the game\\'s own scenes.', false],
-      ['unlockall', 'Unlock everything', 'Every difficulty, character and extra open from the start. Your save is not changed.', false],
-      ['nohunger', 'No sword hunger', 'Akujiki no longer drains your health when it has not killed for a while.', false],
-      ['noscarf', 'Remove scarf', 'Hotsuma without his scarf.', false],
-      ['scol', 'Scarf body collision', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true]
+      ['bars', 'IMAX mode (F7)', 'Full-screen TATE finishing moves: no black bars. Movies and story scenes keep theirs.', false],
+      ['unlockall', 'Unlock everything (Shift+F6)', 'Every difficulty, character and extra open from the start. Your save is not changed.', false],
+      ['infhealth', 'Infinite health (F8)', 'Hotsuma takes no damage from hits, and Akujiki no longer drains him.', false],
+      ['fairboss', 'Fair final boss (F9)', 'Hiruko without the hidden rules: quick seals, no parries, ground teleports only, steady lock-on, and self-destructing talismans count for TATE.', false],
+      ['nohunger', 'No sword hunger (Shift+F7)', 'Akujiki no longer drains your health when it has not killed for a while.', false],
+      ['noscarf', 'Remove scarf (Shift+F8)', 'Hotsuma without his scarf.', false],
+      ['scol', 'Scarf body collision (Shift+F9)', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true]
     ];
     const gameModRows = GAME_MODS.map((m) => {
       const on = m[3] ? s[m[0]] !== false : !!s[m[0]];
@@ -1609,6 +1611,73 @@ L("""      tabPerf: s.tab === 'perf',""",
       doUpdate: () => { if (this.state.updBusy >= 0 || !this.host) return; this.setState({ updBusy: 0 }); this.host.postMessage('update\\nurl=' + this.state.updUrl); },""")
 
 template = template[:logic_start] + logic + template[logic_end:]
+
+# ---- LOCAL PATCH: monochrome theme (black, greys and white; 2026-11-14). The red accents become white everywhere
+# (CSS, inline styles, the page's own code); the light panels and controls are turned dark by the rules below, and a
+# chosen option is white with black text. The key art, logo and guide pictures stay in colour.
+template = must_replace(template,
+    '<rect width="18" height="18" rx="3" fill="#b3122a"></rect><path d="M9 2.5l1.7 4.8 4.8 1.7-4.8 1.7L9 15.5l-1.7-4.8L2.5 9l4.8-1.7z" fill="#fff"></path><circle cx="9" cy="9" r="1.6" fill="#b3122a"></circle>',
+    '<rect width="18" height="18" rx="3" fill="#fff"></rect><path d="M9 2.5l1.7 4.8 4.8 1.7-4.8 1.7L9 15.5l-1.7-4.8L2.5 9l4.8-1.7z" fill="#000"></path><circle cx="9" cy="9" r="1.6" fill="#fff"></circle>')
+template = must_replace(template, "(st[1] ? '#1b1b1f' : '#7a7a82')", "(st[1] ? '#e6e6e6' : '#7a7a7a')")
+for _red, _mono in (('#b3122a', '#ffffff'), ('#e0213d', '#ffffff'), ('#a8112a', '#ffffff'), ('#8f1023', '#ffffff'),
+                    ('#b8122b', '#ffffff'), ('#ff1f3d', '#ffffff'), ('rgba(255,31,61,', 'rgba(255,255,255,'),
+                    ('#e0516a', '#ffffff'), ('#d0152f', '#dddddd'), ('#6e0b1a', '#ffffff'), ('#7d0c1d', '#9a9a9a'),
+                    ('#ffd9de', '#444444'), ('#ff4d6a', '#ffffff'), ('#52d88a', '#ffffff'), ('#8e8e95', '#2a2a2a'),
+                    ('#1f8a3b', '#ffffff')):
+    template = template.replace(_red, _mono)
+MONO = (
+    'html,body{background:#000!important}.stage{background:#000!important;color:#e6e6e6!important}'
+    '.win{background:#000!important;border-color:#2a2a2a!important}'
+    '.tb{background:#000!important;border-bottom:1px solid rgba(255,255,255,.55)!important;color:#e6e6e6!important}'
+    '.tbb{color:#e6e6e6!important}.tbb:hover{background:#1c1c1c!important}.tbb.cl:hover{background:#c42b1c!important}'
+    '.tbb.upd{background:#fff!important;color:#000!important}.tbb.upd:hover{background:#ddd!important}'
+    '.left,.right{background:linear-gradient(180deg,#0e0e0f 0%,#060606 100%)!important}'
+    '.left{box-shadow:6px 0 18px rgba(0,0,0,.85)!important}.right{box-shadow:-6px 0 18px rgba(0,0,0,.85)!important}'
+    '.kanji{color:rgba(255,255,255,.05)!important}'
+    '.h,.fl,.grp h2,.chk,.cap,.mrow b,.brow,.cred h4,.dlg{color:#e6e6e6!important}.fl em{color:#9a9a9a!important}'
+    '.th,.gview,.gtab{border-color:#2a2a2a!important}.th:hover,.gtab.on{border-color:#fff!important}'
+    '.card{background:#000!important;border-color:#262626!important;color:#bdbdbd!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)!important}'
+    '.card p{color:#a8a8a8!important}'
+    '.btn{background:linear-gradient(180deg,#1b1b1c 0%,#0d0d0e 100%)!important;border-color:#333!important;color:#f0f0f0!important;'
+    'box-shadow:inset 3px 0 0 #e8e8e8,inset -3px 0 0 #e8e8e8!important}'
+    '.btn:hover{filter:none!important;background:linear-gradient(180deg,#262627,#141415)!important;'
+    'box-shadow:inset 3px 0 0 #fff,inset -3px 0 0 #fff,0 0 0 1px #fff,0 0 16px rgba(255,255,255,.18)!important}'
+    '.btn .fill{background:#fff!important;opacity:.22!important}'
+    '.btn.run{background:#fff!important;color:#000!important;border-color:#fff!important}'
+    '.btn.warn .lab,.gfile.warn{color:#ff7070!important}'
+    '.tra-s,.studio,.mark{color:#6f6f6f!important}.tra-b,.studio b{color:#e6e6e6!important}.tra-b i{color:#9a9a9a!important}'
+    '.own{color:#8a8a8a!important;border-left-color:#fff!important}.gfile{color:#8a8a8a!important}'
+    '.hero{background:#000!important}'
+        '.shade{background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.75))!important}'
+    '.chip{background:rgba(0,0,0,.85)!important;border-color:rgba(255,255,255,.18)!important}'
+    '.grp{background:linear-gradient(180deg,#0f0f10,#080808)!important;border-color:#2a2a2a!important;'
+    'box-shadow:inset 0 0 0 1px #161616,0 2px 10px rgba(0,0,0,.6)!important}'
+    '.sel,.kb{background:linear-gradient(180deg,#1a1a1b,#0f0f10)!important;border-color:#333!important;color:#eee!important}'
+    '.sel:hover,.kb:hover,.chipb:hover{border-color:#fff!important}.sel svg path{stroke:#ddd!important}'
+    '.menu{background:#0c0c0d!important;border-color:#333!important}.opt{color:#ddd!important}.opt em{color:#7a7a7a!important}'
+    '.opt:hover{background:#1c1c1d!important}.opt.on{background:#fff!important;color:#000!important}.opt.on em{color:#444!important}'
+    '.segs{background:#0c0c0d!important;border-color:#333!important}'
+    '.seg{background:linear-gradient(180deg,#1a1a1b,#0f0f10)!important;border-right-color:#2a2a2a!important;color:#cfcfcf!important}'
+    '.seg:hover{background:linear-gradient(180deg,#262627,#151516)!important;color:#fff!important}'
+    '.seg.on{background:#fff!important;color:#000!important;box-shadow:none!important}'
+    '.chipb{background:#141415!important;border-color:#333!important;color:#ddd!important}'
+    '.chipb.on,.kb.listen{background:#fff!important;color:#000!important;border-color:#fff!important}'
+    '.kb.ro{background:#121213!important;color:#666!important;border-color:#222!important}'
+    '.chk .bx{background:#0a0a0a!important;border-color:#555!important;box-shadow:none!important}.chk:hover .bx{border-color:#fff!important}'
+    '.chk input:checked + .bx{background:#fff!important;border-color:#fff!important}.chk input:checked + .bx svg path{stroke:#000!important}'
+    '.rng input::-webkit-slider-thumb{background:linear-gradient(180deg,#f2f2f2,#9a9a9a)!important;border-color:#000!important}'
+    '.sw i{background:#2a2a2a!important}.sw input:checked + i{background:#fff!important}.sw input:checked + i::after{background:#000!important}'
+    '.scrim-bg{background:rgba(0,0,0,.78)!important}'
+    '.dlg{background:linear-gradient(180deg,#111112,#09090a)!important;border-color:#2a2a2a!important;'
+    'box-shadow:0 24px 70px rgba(0,0,0,.85),inset 0 0 0 1px #1a1a1a!important}'
+    '.dh{background:#000!important;border-bottom:1px solid rgba(255,255,255,.55)!important}.x:hover{background:#262626!important}'
+    '.note,.mrow span{color:#8a8a8a!important}.brow,.mrow{border-bottom-color:#222!important}.cred p{color:#a8a8a8!important}'
+    '.toast{background:#000!important;border:1px solid #333!important;border-left:4px solid #fff!important}'
+    '.pathtxt{background:#0c0c0d!important;color:#ddd!important;border-color:#333!important}'
+    'input[type=checkbox]{accent-color:#fff!important}'
+    '::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:#0a0a0a}'
+    '::-webkit-scrollbar-thumb{background:#333;border-radius:5px}::-webkit-scrollbar-thumb:hover{background:#555}')
+template = must_replace(template, '@media (prefers-reduced-motion:reduce)', MONO + '@media (prefers-reduced-motion:reduce)')
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))
 set_block('template', json.dumps(template).replace('</', r'<\u002F'))  # keep </script> inside the block escaped
 os.makedirs(os.path.dirname(out_path), exist_ok=True)

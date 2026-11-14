@@ -324,7 +324,7 @@ namespace ps2x::settings
                 Definition renderScale{"video", "render_scale", "Render resolution (PCSX2)",
                                        "How many times the PS2's resolution the PCSX2 renderer draws at: 2x is 1280x896, "
                                        "4x is 2560x1792. Higher is sharper and costs only GPU time.",
-                                       Kind::Choice, "3", "PS2X_PCSX2_SCALE", {"1", "2", "3", "4", "6", "8", "12"},
+                                       Kind::Choice, "4", "PS2X_PCSX2_SCALE", {"1", "2", "3", "4", "6", "8", "12"},
                                        {"1x (native, interlaced)", "2x", "3x", "4x", "6x", "8x", "12x (8K)"}, 0, 0, nullptr,
                                        false}; // LOCAL PATCH: applied at the next start (a live switch, e.g. 1080p to 4K
                                                // in the F1 menu, left the renderer stalling a frame every few seconds)
@@ -521,7 +521,7 @@ namespace ps2x::settings
                  "smooth", nullptr, {"sharp", "smooth", "scanlines", "crt"}, {"Nítido", "Suave", "Scanlines", "CRT"}, 0,
                  0, nullptr, true});
             add({"video", "antialias", "Antisserrilhado (FXAA)", "Suaviza as bordas serrilhadas dos objetos.",
-                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
             add({"video", "vsync", "VSync", "Sincroniza com o monitor (evita imagem rasgada).", Kind::Bool, "true",
                  nullptr, {}, {}, 0, 0, nullptr, true});
             add({"video", "deinterlace", "Desentrelaçamento", "Junta os dois campos entrelaçados como uma TV faz.",
@@ -565,33 +565,46 @@ namespace ps2x::settings
             add({"video", "low_latency", "Low latency",
                  "Stops the graphics driver queueing finished pictures ahead of the screen, which removes about 16-33 ms of "
                  "delay (what NVIDIA Reflex does in other games). Best with frame generation or V-Sync on. F6 in game.",
-                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH: frame generation (ps2_framegen.cpp). F4 in game.
             add({"video", "frame_generation", "Frame generation",
                  "On a 120 Hz or faster screen, adds in-between pictures made from the game's own, so motion is as smooth "
                  "as the screen. Adds about one frame (16 ms) of delay. F4 switches it while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): the final boss made fair (ps2_fair_boss.cpp, reference/hiruko_boss.md).
+            add({"game", "fair_final_boss", "Fair final boss",
+                 "Hiruko without the hidden rules: one hit opens each seal, no parries or guard against your sword, "
+                 "he only teleports to spots on the ground, lock-on stays on him, and talismans that blow themselves "
+                 "up still count towards your TATE. F9 switches it while playing.",
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): every difficulty, character and extra open from the start (ps2_unlocks.cpp).
             add({"game", "unlock_all", "Unlock everything",
                  "Every difficulty, character and extra open from the start. Your save is not changed: switch it off and "
-                 "everything is as you earned it. (Oboro coins count as found while it is on.)",
+                 "everything is as you earned it. (Oboro coins count as found while it is on.) Shift+F6 switches it while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): Akujiki never drains your health (ps2_hud_mod.cpp).
             add({"game", "no_sword_hunger", "No sword hunger",
-                 "Akujiki no longer drains your health when it has not killed for a while: play at your own pace.",
+                 "Akujiki no longer drains your health when it has not killed for a while: play at your own pace. "
+                 "Shift+F7 switches it while playing.",
+                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): Hotsuma cannot be hurt (ps2_hud_mod.cpp, hook in CPlayer::Damage). F8 in game.
+            add({"game", "infinite_health", "Infinite health",
+                 "Hotsuma takes no damage from hits, and Akujiki no longer drains him. F8 switches it "
+                 "while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): no scarf at all (ps2_hud_mod.cpp).
-            add({"game", "hide_scarf", "Remove scarf", "Hotsuma without his scarf.", Kind::Bool, "false", nullptr, {}, {}, 0, 0,
+            add({"game", "hide_scarf", "Remove scarf", "Hotsuma without his scarf. Shift+F8 switches it while playing.", Kind::Bool, "false", nullptr, {}, {}, 0, 0,
                  nullptr, true});
             // LOCAL PATCH (mod): the scarf slides around Hotsuma's body instead of through it (ps2_scarf_collide.cpp).
             add({"game", "scarf_collision", "Scarf body collision",
-                 "The scarf keeps its float and trail but no longer passes through Hotsuma's body.",
-                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
-            // LOCAL PATCH (mod): no black bars in the game's cinematics (ps2_hud_mod.cpp). Shift+F5 in game.
-            add({"game", "hide_cinema_bars", "Hide cinematic bars",
-                 "Removes the black bands at the top and bottom of the game's cinematic moments (the TATE kill camera, "
-                 "scenes in the game's own graphics). Shift+F5 switches it while playing.",
+                 "The scarf keeps its float and trail but no longer passes through Hotsuma's body. Shift+F9 switches it "
+                 "while playing.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): no black bars in the game's cinematics (ps2_hud_mod.cpp). F7 in game.
+            add({"game", "hide_cinema_bars", "IMAX mode",
+                 "Full-screen TATE finishing moves: no black bars at the top and bottom. Movies and story scenes keep "
+                 "theirs. F7 switches it while playing.",
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): hide the HUD (ps2_hud_mod.cpp). F5 in game.
             add({"game", "hide_hud", "Hide HUD",
                  "Hides health, kunai, magic, the TATE counter and boss gauges for a clean screen. F5 switches it while playing.",
@@ -599,7 +612,7 @@ namespace ps2x::settings
             // LOCAL PATCH: the performance overlay (FPS, frame time, 1% low, CPU, GPU, RAM, VRAM) in the top-left corner.
             add({"performance", "stats_overlay", "Performance overlay",
                  "FPS, frame time, 1% lows, CPU and GPU use, RAM and VRAM in the top-left corner while you play.",
-                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
             add({"performance", "show_fps", "Mostrar FPS", "Contador de quadros por segundo no canto da tela.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // Áudio
@@ -634,11 +647,11 @@ namespace ps2x::settings
             // Jogo (ganchos que o override do jogo implementa)
             add({"game", "skip_intro", "Skip start-up logos",
                  "SEGA, Overworks and ADX logos pass in about a second each (a button press during them does the same).",
-                 Kind::Bool, "false",
+                 Kind::Bool, "true",
                  "PS2X_SKIP_INTRO", {}, {}, 0, 0, nullptr, false});
             // LOCAL PATCH: the studio intro video before the game's own logos (ps2_intro_video.h).
             add({"game", "studio_intro", "Studio intro (Twilight Orchard)",
-                 "Plays intro/studio_intro.mp4 before the game starts. Any key or button skips it.", Kind::Bool, "true",
+                 "Plays intro/studio_intro.mp4 before the game starts. Any key or button skips it.", Kind::Bool, "false",
                  "PS2X_STUDIO_INTRO", {}, {}, 0, 0, nullptr, false});
             // LOCAL PATCH (mod): Hotsuma's scarf colour, "original" (red) or #RRGGBB (ps2_scarf_colour.cpp). Live: the
             // in-game menu can change it while playing.

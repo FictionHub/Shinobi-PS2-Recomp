@@ -67,7 +67,7 @@ namespace launcher
 
     std::string pageValues(const SettingGet &get, bool diagnostics)
     {
-        const std::string scale = get("video", "render_scale", "3");
+        const std::string scale = get("video", "render_scale", "4");
         const std::string res = scale == "1"   ? "Native"
                                 : scale == "3" ? "1080p"
                                 : scale == "4" ? "1440p"
@@ -82,7 +82,7 @@ namespace launcher
         const int sharp = std::atoi(get("video", "sharpening", "20").c_str());
         const int fx = sharp <= 0 ? 0 : sharp <= 25 ? 1 : sharp <= 50 ? 2 : sharp <= 75 ? 3 : 4;
         const std::string aa = truthy(get("video", "edge_aa", "false"))     ? "Edge AA"
-                               : truthy(get("video", "antialias", "false")) ? "FXAA"
+                               : truthy(get("video", "antialias", "true")) ? "FXAA"
                                                                             : "Off";
         const std::string fps = get("video", "fps_target", "60");
         const auto b = [](bool x) { return x ? "true" : "false"; };
@@ -97,16 +97,18 @@ namespace launcher
            << ",scrf:" << jsonString(get("video", "filter", "smooth"))
            << ",dith:" << b(get("video", "dithering", "on") != "off") << ",mip:" << b(get("video", "mipmapping", "on") != "off")
            << ",upfix:" << b(get("video", "upscale_fixes", "on") != "off")
-           << ",ovl:" << b(truthy(get("performance", "stats_overlay", "false")))
+           << ",ovl:" << b(truthy(get("performance", "stats_overlay", "true")))
            << ",cam:" << b(truthy(get("game", "close_camera", "false")))
            << ",hud:" << b(truthy(get("game", "hide_hud", "false")))
-           << ",bars:" << b(truthy(get("game", "hide_cinema_bars", "false")))
-           << ",scol:" << b(truthy(get("game", "scarf_collision", "true")))
+           << ",bars:" << b(truthy(get("game", "hide_cinema_bars", "true")))
+           << ",scol:" << b(truthy(get("game", "scarf_collision", "false")))
            << ",noscarf:" << b(truthy(get("game", "hide_scarf", "false")))
            << ",nohunger:" << b(truthy(get("game", "no_sword_hunger", "false")))
            << ",unlockall:" << b(truthy(get("game", "unlock_all", "false")))
+           << ",fairboss:" << b(truthy(get("game", "fair_final_boss", "true")))
+           << ",infhealth:" << b(truthy(get("game", "infinite_health", "false")))
            << ",fg:" << b(truthy(get("video", "frame_generation", "false")))
-           << ",lowlat:" << b(truthy(get("video", "low_latency", "false")))
+           << ",lowlat:" << b(truthy(get("video", "low_latency", "true")))
            << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
            << ",scarf:" << jsonString(scarfColour(get("game", "scarf_color", "original")))
            << ",win:" << jsonString(get("video", "window", "borderless"))
@@ -135,12 +137,12 @@ namespace launcher
             first = false;
         }
         const std::string window = get("video", "window", "borderless");
-        js << "},mods:{intro:" << b(truthy(get("game", "skip_intro", "false")))
-           << ",studio:" << b(truthy(get("game", "studio_intro", "true"))) << ",full:" << b(window != "windowed")
+        js << "},mods:{intro:" << b(truthy(get("game", "skip_intro", "true")))
+           << ",studio:" << b(truthy(get("game", "studio_intro", "false"))) << ",full:" << b(window != "windowed")
            << ",fastvu:" << b(get("performance", "fast_vu", "off") == "on")
            << ",dbg:" << b(truthy(get("performance", "show_fps", "false"))) << ",diag:" << b(diagnostics)
            << ",legacy:" << b(get("audio", "sound_chip", "pcsx2") == "legacy")
-           << ",k8:" << b(truthy(get("video", "allow_8k", "false")) || get("video", "render_scale", "3") == "12")
+           << ",k8:" << b(truthy(get("video", "allow_8k", "false")) || get("video", "render_scale", "4") == "12")
            << ",nscale:" << b(get("effects", "native_scaling", "normal") != "off")
            << ",rr5fix:" << b(truthy(get("effects", "rr5_dof_fix", "false")))
            << ",dropst:" << b(get("effects", "large_st", "keep") == "drop")
@@ -184,16 +186,18 @@ namespace launcher
             set("video", "dithering", get("dith", "1") == "1" ? "on" : "off");
             set("video", "mipmapping", get("mip", "1") == "1" ? "on" : "off");
             set("video", "upscale_fixes", get("upfix", "1") == "1" ? "on" : "off");
-            set("performance", "stats_overlay", b(get("ovl", "0") == "1"));
+            set("performance", "stats_overlay", b(get("ovl", "1") == "1"));
             set("game", "close_camera", b(get("cam", "0") == "1"));
             set("game", "hide_hud", b(get("hud", "0") == "1"));
-            set("game", "hide_cinema_bars", b(get("bars", "0") == "1"));
-            set("game", "scarf_collision", b(get("scol", "1") == "1"));
+            set("game", "hide_cinema_bars", b(get("bars", "1") == "1"));
+            set("game", "scarf_collision", b(get("scol", "0") == "1"));
             set("game", "hide_scarf", b(get("noscarf", "0") == "1"));
             set("game", "no_sword_hunger", b(get("nohunger", "0") == "1"));
             set("game", "unlock_all", b(get("unlockall", "0") == "1"));
+            set("game", "fair_final_boss", b(get("fairboss", "1") == "1"));
+            set("game", "infinite_health", b(get("infhealth", "0") == "1"));
             set("video", "frame_generation", b(get("fg", "0") == "1"));
-            set("video", "low_latency", b(get("lowlat", "0") == "1"));
+            set("video", "low_latency", b(get("lowlat", "1") == "1"));
             {
                 const std::string fgt = get("fgt", "monitor");
                 set("video", "framegen_target",
@@ -205,8 +209,8 @@ namespace launcher
             const std::string scarf = scarfColour(get("scarf", "original"));
             set("game", "scarf_color", scarf.empty() ? std::string("original") : scarf);
         }
-        set("game", "skip_intro", b(get("mod.intro", "0") == "1"));
-        set("game", "studio_intro", b(get("mod.studio", "1") == "1"));
+        set("game", "skip_intro", b(get("mod.intro", "1") == "1"));
+        set("game", "studio_intro", b(get("mod.studio", "0") == "1"));
         const std::string fps = get("fps", "60");
         set("video", "fps_target", fps == "Unlocked" ? std::string("unlocked") : (fps == "30" || fps == "50") ? fps : std::string("60"));
         // Fullscreen on: keep exclusive "fullscreen" if that is what the file has, else borderless.

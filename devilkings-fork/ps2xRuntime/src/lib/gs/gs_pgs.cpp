@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <vector>
 #include <string>
 
 // LOCAL: PS2X_RENDERER=pcsx2 hands every entry point below to the PCSX2 GS backend (gs_pcsx2.cpp).
