@@ -27,3 +27,4 @@ launcher.ini
 settings.ini
 # bin/Shinobi.zip is unpacked to bin/Shinobi.exe by the launcher the first time you press Play.
 bin/Shinobi.exe
+bin/Shinobi.zip.unpacked

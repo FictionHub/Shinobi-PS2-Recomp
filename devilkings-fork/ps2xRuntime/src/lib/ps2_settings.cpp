@@ -326,7 +326,8 @@ namespace ps2x::settings
                                        "4x is 2560x1792. Higher is sharper and costs only GPU time.",
                                        Kind::Choice, "3", "PS2X_PCSX2_SCALE", {"1", "2", "3", "4", "6", "8", "12"},
                                        {"1x (native, interlaced)", "2x", "3x", "4x", "6x", "8x", "12x (8K)"}, 0, 0, nullptr,
-                                       true}; // LOCAL PATCH: live (gs_pcsx2.cpp applyLiveSettings), except to or from 1x
+                                       false}; // LOCAL PATCH: applied at the next start (a live switch, e.g. 1080p to 4K
+                                               // in the F1 menu, left the renderer stalling a frame every few seconds)
                 // LOCAL PATCH: 12x = 8K (7680x5376), PCSX2's highest upscale; the launcher offers it once the Mod Menu's
                 // "8K resolution" switch is on.
                 renderScale.choiceEnvironment = {"1", "", "3", "4", "6", "8", "12"};
@@ -569,6 +570,15 @@ namespace ps2x::settings
             add({"video", "frame_generation", "Frame generation",
                  "On a 120 Hz or faster screen, adds in-between pictures made from the game's own, so motion is as smooth "
                  "as the screen. Adds about one frame (16 ms) of delay. F4 switches it while playing.",
+                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): every difficulty, character and extra open from the start (ps2_unlocks.cpp).
+            add({"game", "unlock_all", "Unlock everything",
+                 "Every difficulty, character and extra open from the start. Your save is not changed: switch it off and "
+                 "everything is as you earned it. (Oboro coins count as found while it is on.)",
+                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): Akujiki never drains your health (ps2_hud_mod.cpp).
+            add({"game", "no_sword_hunger", "No sword hunger",
+                 "Akujiki no longer drains your health when it has not killed for a while: play at your own pace.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): no scarf at all (ps2_hud_mod.cpp).
             add({"game", "hide_scarf", "Remove scarf", "Hotsuma without his scarf.", Kind::Bool, "false", nullptr, {}, {}, 0, 0,

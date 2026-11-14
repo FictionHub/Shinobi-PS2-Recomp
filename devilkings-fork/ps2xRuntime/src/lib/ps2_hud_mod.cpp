@@ -50,3 +50,20 @@ bool ps2xScarfHidden()
     }
     return s_hidden.load(std::memory_order_relaxed);
 }
+
+// LOCAL PATCH (mod): Akujiki's hunger off. CPlayer::MainControlMeters (0x24acc0) drains the sword gauge (+0x330) every
+// frame while the sword is "awake" (CheckSwordWake), then your health (+0x32C) once the gauge is empty. With [game]
+// no_sword_hunger (Mod Menu) that drain step is skipped (the check reads as asleep there only); kills, the gauge and
+// everything else work as normal.
+bool ps2xSwordHungerOff()
+{
+    static std::atomic<uint64_t> s_version{~0ull};
+    static std::atomic<bool> s_off{false};
+    const uint64_t version = ps2x::settings::version();
+    if (s_version.load(std::memory_order_relaxed) != version)
+    {
+        s_off.store(ps2x::settings::getBool("game", "no_sword_hunger"), std::memory_order_relaxed);
+        s_version.store(version, std::memory_order_relaxed);
+    }
+    return s_off.load(std::memory_order_relaxed);
+}

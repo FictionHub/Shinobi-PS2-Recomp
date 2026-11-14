@@ -27,6 +27,7 @@
 #include "WebView2EnvironmentOptions.h"
 
 #include "launcher_dualsense.h"
+#include "launcher_update.h"
 #include "launcher_ini.h"
 #include "launcher_iso.h"
 #include "launcher_manual.h"
@@ -34,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <fstream>
 #include <cstdlib>
 #include <atomic>
 #include <filesystem>
@@ -124,9 +126,29 @@ namespace
     {
         std::lock_guard<std::mutex> lock(g_unpackMutex);
         std::error_code ec;
-        if (fs::exists(g_runner, ec))
-            return true;
         const fs::path packed = g_runner.parent_path() / "Shinobi.zip";
+        // LOCAL PATCH: unpacked again whenever the zip is not the one last unpacked (its size and date are kept next to it
+        // in Shinobi.zip.unpacked). A new version extracted over an old folder used to keep the old Shinobi.exe, because
+        // the zip was only unpacked when the exe was missing: the update's fixes never reached the game.
+        const fs::path marker = g_runner.parent_path() / "Shinobi.zip.unpacked";
+        std::string stamp;
+        if (fs::exists(packed, ec))
+        {
+            const auto size = fs::file_size(packed, ec);
+            const auto when = fs::last_write_time(packed, ec).time_since_epoch().count();
+            stamp = std::to_string(size) + " " + std::to_string(static_cast<long long>(when));
+        }
+        if (fs::exists(g_runner, ec))
+        {
+            if (stamp.empty())
+                return true; // a development build: no zip
+            std::ifstream in(marker);
+            std::string seen;
+            std::getline(in, seen);
+            if (seen == stamp)
+                return true;
+            std::fprintf(stderr, "[launcher] Shinobi.zip is newer than the unpacked game program: unpacking it again\n");
+        }
         if (!fs::exists(packed, ec))
             return false;
         wchar_t system[MAX_PATH] = {};
@@ -139,8 +161,15 @@ namespace
         if (CreateProcessW(nullptr, unpack.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &info, &process))
         {
             WaitForSingleObject(process.hProcess, 180000);
+            DWORD code = 1;
+            GetExitCodeProcess(process.hProcess, &code);
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
+            if (code == 0 && !stamp.empty())
+            {
+                std::ofstream out(marker, std::ios::trunc);
+                out << stamp << "\n";
+            }
         }
         return fs::exists(g_runner, ec);
     }
@@ -569,6 +598,30 @@ namespace
             ShowWindow(g_hwnd, SW_MINIMIZE);
         else if (command == "maximize")
             ShowWindow(g_hwnd, IsZoomed(g_hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        else if (command == "update")
+        {
+            // Only a release download from GitHub is ever installed.
+            const std::string url = values["url"];
+            if (g_gameProcess)
+                post(L"update-error:Close the game first, then press Update again.");
+            else if (url.rfind("https://github.com/", 0) != 0 || url.find("/releases/download/") == std::string::npos)
+                post(L"update-error:That is not a release download.");
+            else
+                launcher::update::install(g_root, url, [](const std::wstring &m) { postFromThread(m); }, []() {
+                    const std::wstring exe = (g_root / "Shinobi Launcher.exe").wstring();
+                    std::wstring cmd = L"\"" + exe + L"\"";
+                    STARTUPINFOW info{};
+                    info.cb = sizeof(info);
+                    PROCESS_INFORMATION process{};
+                    if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, g_root.wstring().c_str(), &info,
+                                       &process))
+                    {
+                        CloseHandle(process.hThread);
+                        CloseHandle(process.hProcess);
+                    }
+                    PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
+                });
+        }
         else if (command == "close")
             PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
         else if (command == "manual")
@@ -928,6 +981,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
 
     if (g_shotPath.empty())
         g_unpackThread = std::thread([]() { unpackGameProgram(); }); // the zipped game program, unpacked in the background
+    // LOCAL PATCH: updates from the project's GitHub releases (launcher_update.cpp). The check waits a moment so the page
+    // is up to receive its answer.
+    launcher::update::cleanup(g_root);
+    if (g_shotPath.empty())
+        launcher::update::startCheck(g_root, [](const std::wstring &message) {
+            Sleep(3000);
+            postFromThread(message);
+        });
 
     if (!fs::exists(g_page))
     {

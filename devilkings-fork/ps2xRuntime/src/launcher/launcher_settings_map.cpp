@@ -103,6 +103,8 @@ namespace launcher
            << ",bars:" << b(truthy(get("game", "hide_cinema_bars", "false")))
            << ",scol:" << b(truthy(get("game", "scarf_collision", "true")))
            << ",noscarf:" << b(truthy(get("game", "hide_scarf", "false")))
+           << ",nohunger:" << b(truthy(get("game", "no_sword_hunger", "false")))
+           << ",unlockall:" << b(truthy(get("game", "unlock_all", "false")))
            << ",fg:" << b(truthy(get("video", "frame_generation", "false")))
            << ",lowlat:" << b(truthy(get("video", "low_latency", "false")))
            << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
@@ -188,6 +190,8 @@ namespace launcher
             set("game", "hide_cinema_bars", b(get("bars", "0") == "1"));
             set("game", "scarf_collision", b(get("scol", "1") == "1"));
             set("game", "hide_scarf", b(get("noscarf", "0") == "1"));
+            set("game", "no_sword_hunger", b(get("nohunger", "0") == "1"));
+            set("game", "unlock_all", b(get("unlockall", "0") == "1"));
             set("video", "frame_generation", b(get("fg", "0") == "1"));
             set("video", "low_latency", b(get("lowlat", "0") == "1"));
             {

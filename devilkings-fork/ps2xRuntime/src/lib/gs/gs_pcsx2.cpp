@@ -1322,9 +1322,10 @@ namespace ps2x::pcsx2gs
         if (g_started.load(std::memory_order_acquire) != 1)
             return;
         State &s = state();
+        // LOCAL PATCH: the render scale is no longer changed while playing (it applies at the next start): switching it
+        // live (1080p to 4K in the F1 menu) left the renderer stalling a frame every few seconds. The scale the game
+        // started with stays in RRV_PCSX2_GS_FULL_SCALE.
         const std::string scale = ps2x::settings::get("video", "render_scale");
-        if (s.fullFrameScale >= 2 && scale != "1")
-            _putenv_s("RRV_PCSX2_GS_FULL_SCALE", std::to_string(vramSafeScale(std::atoi(scale.c_str()))).c_str());
         const std::string aniso = ps2x::settings::get("video", "anisotropic");
         _putenv_s("RRV_PCSX2_GS_ANISO", aniso == "off" ? "0" : aniso.c_str());
         _putenv_s("RRV_PCSX2_GS_TEXTURE_FILTER", ps2x::settings::get("video", "texture_filter") == "bilinear" ? "bilinear" : "ps2");
@@ -1745,4 +1746,10 @@ namespace ps2x::pcsx2gs
         }
 #endif
     }
+}
+
+// Testing (PS2X_TEST_SCALE_AT in ps2_runtime.cpp): the F1 menu's live update.
+void ps2xApplyLiveSettingsForTest()
+{
+    ps2x::pcsx2gs::applyLiveSettings();
 }

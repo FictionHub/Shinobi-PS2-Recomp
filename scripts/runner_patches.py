@@ -211,3 +211,20 @@ if 'ps2xCinemaBarsHidden' not in raw:
         write(path, t, nl)
         done = 1
 print('cinematic bars (screen clipping) hook added:', done, '(0 = already done)')
+
+# ---- 6. No sword hunger mod: CPlayer::MainControlMeters reads CheckSwordWake's answer at 0x24ad00 to decide whether the
+# sword gauge, then the health, is drained; while ps2xSwordHungerOff() that answer is read as "asleep" there.
+path = os.path.join(D, 'MainControlMeters__7CPlayerFv_0x24acc0.cpp')
+raw = read(path)
+done = 0
+if 'ps2xSwordHungerOff' not in raw:
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    old = 'label_24ad00:\n'
+    if t.count(old) == 1:
+        t = t.replace(old, old + '    if (ps2xSwordHungerOff()) // LOCAL PATCH (mod): no sword hunger\n        SET_GPR_U64(ctx, 2, 0);\n')
+        k = t.find('void MainControlMeters__7CPlayerFv_0x24acc0(')
+        t = t[:k] + 'bool ps2xSwordHungerOff(); // ps2_hud_mod.cpp (LOCAL PATCH)\n' + t[k:]
+        write(path, t, nl)
+        done = 1
+print('no sword hunger hook added:', done, '(0 = already done)')

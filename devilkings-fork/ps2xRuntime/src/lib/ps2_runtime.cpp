@@ -2436,6 +2436,8 @@ bool PS2Runtime::loadELF(const std::string &elfPath)
     {
         extern void ps2xCriRnaInstall(PS2Runtime &runtime); // ps2_cri_rna.cpp (GitHub issue #2)
         ps2xCriRnaInstall(*this);
+        extern void ps2xUnlocksInstall(PS2Runtime &runtime); // ps2_unlocks.cpp (Unlock everything mod)
+        ps2xUnlocksInstall(*this);
     }
 
     RUNTIME_LOG("ELF file loaded successfully. Entry point: 0x" << std::hex << m_cpuContext.pc << std::dec);
@@ -4542,6 +4544,26 @@ void PS2Runtime::run()
 
             }
         });
+        // Testing: PS2X_TEST_SCALE_AT=<vblank>:<render scale> changes the render scale while playing at that moment, as
+        // the F1 menu does (live-switch bugs reproduced without a person).
+        {
+            static const auto s_testScale = []() -> std::pair<uint64_t, int> {
+                unsigned long long at = 0; int scale = 0;
+                const char *e = std::getenv("PS2X_TEST_SCALE_AT");
+                if (e && std::sscanf(e, "%llu:%d", &at, &scale) == 2)
+                    return {at, scale};
+                return {0, 0};
+            }();
+            static bool s_testDone = false;
+            if (!s_testDone && s_testScale.second && m_eeScheduler && m_eeScheduler->currentVSyncTick() >= s_testScale.first)
+            {
+                s_testDone = true;
+                ps2x::settings::set("video", "render_scale", std::to_string(s_testScale.second));
+                extern void ps2xApplyLiveSettingsForTest();
+                ps2xApplyLiveSettingsForTest();
+                std::fprintf(stderr, "[test] render scale switched to %d while playing\n", s_testScale.second);
+            }
+        }
         uint32_t presentWidth = FB_WIDTH;
         uint32_t presentHeight = DEFAULT_DISPLAY_HEIGHT;
         UploadFrame(frameTex, this, presentWidth, presentHeight);

@@ -204,7 +204,7 @@ html.ingame .tb{app-region:no-drag;-webkit-app-region:no-drag}
 .btn.warn .lab{color:#b3122a}
 .pad-focus{outline:3px solid #b3122a!important;outline-offset:2px!important;border-radius:4px}
 input[type=range].pad-focus{outline-offset:4px!important}
-.ic-mute{display:none}
+.ic-mute{display:none}.tbb.upd{width:auto!important;padding:0 12px!important;margin:4px 8px 4px 0;background:#b3122a!important;color:#fff!important;font-weight:700;font-size:12px;letter-spacing:.06em;border-radius:3px;text-transform:uppercase}.tbb.upd:hover{background:#d0152f!important}
 html.muted .ic-snd{display:none}
 html.muted .ic-mute{display:inline}
 html.nomusic .snd{opacity:.35}
@@ -277,6 +277,8 @@ template = must_replace(template, '@media (prefers-reduced-motion:reduce)', css 
 # The title bar is a real Windows title bar (CSS app-region, see the host): drag, double-click to maximise, snap.
 # Left of minimise: the music mute button (speaker / crossed speaker, html.muted picks the icon).
 template = must_replace(template, '<button class="tbb" aria-label="Minimize">',
+                        '<sc-if value="{{hasUpdate}}" hint-placeholder-val="{{false}}"><button class="tbb upd" title="{{updTitle}}" '
+                        'sc-camel-on-click="{{doUpdate}}">{{updLabel}}</button></sc-if>'
                         '<button class="tbb snd" aria-label="Mute music" title="Music on / off" sc-camel-on-click="{{toggleMute}}">'
                         '<svg class="ic-snd" width="14" height="12" sc-camel-view-box="0 0 14 12" aria-hidden="true">'
                         '<path d="M1 4h3l4-3v10l-4-3H1z" fill="currentColor"></path>'
@@ -1456,7 +1458,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -1497,7 +1499,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, unlockall: !!s.unlockall, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
@@ -1576,6 +1578,8 @@ L("""    const modRows = MODS.map((m) => ({""",
       ['cam', 'Close-up camera (F3)', 'A closer, over-the-shoulder camera for more intimate combat.', false],
       ['hud', 'Hide HUD (F5)', 'Health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.', false],
       ['bars', 'Hide cinematic bars (Shift+F5)', 'No black bands in the TATE kill camera and the game\\'s own scenes.', false],
+      ['unlockall', 'Unlock everything', 'Every difficulty, character and extra open from the start. Your save is not changed.', false],
+      ['nohunger', 'No sword hunger', 'Akujiki no longer drains your health when it has not killed for a while.', false],
       ['noscarf', 'Remove scarf', 'Hotsuma without his scarf.', false],
       ['scol', 'Scarf body collision', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true]
     ];
@@ -1589,6 +1593,20 @@ L("""      toggle: () => this.setState({ mods: Object.assign({}, this.state.mods
     }));""",
   """      toggle: () => this.setState({ mods: Object.assign({}, this.state.mods, { [m[0]]: !this.state.mods[m[0]] }) })
     })));""")
+
+# Updates: the host tells the page about a newer release; the button installs it.
+L("""    if (m === 'manualhide') { this.manualHide(); return; }""",
+  """    if (m === 'manualhide') { this.manualHide(); return; }
+    if (m.indexOf('update:') === 0) { const a = m.slice(7).split('|'); this.setState({ updTag: a[0], updUrl: a[1], updBusy: -1 }); return; }
+    if (m.indexOf('update-progress:') === 0) { this.setState({ updBusy: +m.slice(16) }); return; }
+    if (m.indexOf('update-error:') === 0) { this.setState({ updBusy: -1 }); this.toastMsg(m.slice(13)); return; }
+    if (m === 'update-done') { this.setState({ updBusy: 100 }); this.toastMsg('Updated to ' + (this.state.updTag || 'the new version') + ': restarting...'); return; }""")
+L("""      tabPerf: s.tab === 'perf',""",
+  """      tabPerf: s.tab === 'perf',
+      hasUpdate: !!s.updTag && !this.ingame,
+      updLabel: s.updBusy >= 0 ? (s.updBusy >= 100 ? 'Restarting...' : 'Updating ' + s.updBusy + '%') : 'Update to ' + (s.updTag || ''),
+      updTitle: 'A new version (' + (s.updTag || '') + ') is out. Your saves, game files and settings are kept.',
+      doUpdate: () => { if (this.state.updBusy >= 0 || !this.host) return; this.setState({ updBusy: 0 }); this.host.postMessage('update\\nurl=' + this.state.updUrl); },""")
 
 template = template[:logic_start] + logic + template[logic_end:]
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))

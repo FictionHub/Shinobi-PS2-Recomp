@@ -410,6 +410,7 @@ add_library(ps2_runtime STATIC
     src/lib/ps2_close_camera.cpp
     src/lib/ps2_estimate_trace.cpp
     src/lib/ps2_hud_mod.cpp
+    src/lib/ps2_unlocks.cpp
     src/lib/ps2_scarf_collide.cpp
     src/lib/ps2_framegen.cpp
     src/lib/ps2_cri_rna.cpp
@@ -767,12 +768,13 @@ if(WIN32 AND NOT PS2X_IS_VITA)
         src/launcher/launcher_settings_map.cpp
         src/launcher/launcher_ini.cpp
         src/launcher/launcher_dualsense.cpp
+        src/launcher/launcher_update.cpp
         src/launcher/launcher_icon.rc
     )
     target_compile_features(ShinobiLauncher PRIVATE cxx_std_20)
     target_include_directories(ShinobiLauncher PRIVATE "${PS2X_WEBVIEW2_DIR}/include")
     target_link_libraries(ShinobiLauncher PRIVATE "${PS2X_WEBVIEW2_DIR}/x64/WebView2LoaderStatic.lib"
-        version shlwapi ole32 user32 dwmapi shell32 advapi32
+        version shlwapi ole32 user32 dwmapi shell32 advapi32 winhttp
         windowsapp) # LOCAL PATCH: Windows.Data.Pdf for the manual (launcher_manual.cpp)
     if(MSVC)
         target_compile_options(ShinobiLauncher PRIVATE /utf-8)
