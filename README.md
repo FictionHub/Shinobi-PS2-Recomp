@@ -2,17 +2,26 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
-**v0.4.2 is out:** 4K and 8K fixed (60 fps at 8K), Vulkan works again. Plus v0.4's brand-new launcher, mod support, DualSense HD haptics, a close-up camera and 8K. 🔥
+**v0.5 is out:** Frame Generation (360 FPS+), Latency Reduction, IMAX Mode, a Final Boss Balance mode, Infinite Health, 8 new mods on the F keys, Proton / Linux / Steam Deck (beta), a new overlay and 15+ fixes. 🔥
 
 <p align="center">
-<img src="docs/screenshots/v0.4/launcher-display.jpg" width="100%">
-<br><sub>The brand-new launcher: rotating artwork, settings in tabs, and fully playable with a controller.</sub></p>
+<img src="docs/screenshots/v0.5/banner.jpg" width="100%"></p>
+
+<p align="center">
+<img src="docs/screenshots/v0.5/launcher.jpg" width="100%">
+<br><sub>The new dark launcher. The art stays in full colour.</sub></p>
 
 ## Download and play
 
-1. Click the green **Code** button above, then **Download ZIP**. When it has downloaded, right-click the file and choose **Extract All...** (any folder except Program Files). That is GitHub's own download, the only unzipping there is.
+**Easiest: [RecompLauncher](https://recompstore.com/dev/therealafsan).** It installs the game and keeps it up to date for you (new versions appear there once they are verified, usually within a few hours to a day).
+
+**Or from GitHub:**
+
+1. Open **[Releases](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases)** and download **Shinobi-PS2-Recomp-v0.5.0-Windows-x64.zip**. Right-click it and choose **Extract All...** (any folder except Program Files).
 2. Run **`Shinobi Launcher.exe`** (it is in the main folder you just unzipped).
 3. Press **Game File**, choose your own Shinobi (USA) disc image, press **Set up game files**, then **Play Game**.
+
+Already on v0.4? The launcher can update itself: press **Update** in its title bar. Your saves and settings are kept.
 
 Everything is in this one repository: the launcher, the game program and the source code.
 
@@ -29,6 +38,101 @@ Reddit: <https://www.reddit.com/user/Afsan23/>
 > **This repository does not contain the game.** No disc image, no game files and no game data. You need your own copy of Shinobi (PS2, USA, SLUS-20459), made into an image file from the disc you own.
 
 The game's own program is translated ("recompiled") to run natively on Windows. PCSX2's graphics (GS) and sound (SPU2) code is used for the parts that have to match the PS2 exactly.
+
+---
+
+## v0.5: frame generation, IMAX mode and a pile of mods
+
+A lot of this came straight from your feedback on Reddit. Thank you.
+
+### Performance
+
+- **Frame Generation (F4):** in-between frames for high refresh rate screens. Targets: Auto, 120, 144, 240, 360 or Max. Auto sits just under your screen's refresh rate. (Expect some ghosting the higher you go.)
+- **Latency Reduction (F6):** stops the graphics driver queueing frames, for about 16–33 ms less input delay (similar idea to NVIDIA Reflex).
+- **New Performance Overlay (F2):** FPS, frame time, average, 1% lows, CPU, GPU, RAM and VRAM.
+
+<table>
+<tr>
+<td width="62%"><img src="docs/screenshots/v0.5/street-overlay.jpg"><br><sub>Frame generation with the overlay: around 200 FPS.</sub></td>
+<td width="38%"><img src="docs/screenshots/v0.5/fps-tab.jpg"><br><sub>The new FPS tab.</sub></td>
+</tr>
+</table>
+
+<p align="center">
+<img src="docs/screenshots/v0.5/combat-overlay.jpg" width="100%">
+<br><sub>Combat at 250 FPS.</sub></p>
+
+### 8 new mods (Mod Menu, or straight from the F keys while you play)
+
+- **IMAX Mode (F7):** the TATE finishing moves play full screen with no black bars. Movies and story scenes keep theirs. (This was the hardest part.)
+- **Infinite Health (F8):** Hotsuma takes no damage from hits, and Akujiki can't drain him.
+- **Final Boss Balance (F9)** *(beta)*: Hiruko without the hidden rules.
+  - Seals open with one counted hit.
+  - No parries of your sword before the real fight, and no instant guard when you slash him while he's idle.
+  - He only teleports to spots on the ground, never mid-air.
+  - Lock-on stays on him instead of jumping to the talismans.
+  - You can hit him while he laughs and while he teleports.
+  - Talismans that blow themselves up still count towards your TATE chain, and new ones come twice as fast.
+- **Hide HUD (F5):** health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.
+- **Uncursed Sword (Shift+F7):** Akujiki no longer drains your health when you haven't killed for a while.
+- **Unlock Everything (Shift+F6):** every difficulty, character and extra open from the start. Your save isn't changed. (Restart the game after switching it.)
+- **Remove Scarf (Shift+F8):** Hotsuma without his scarf.
+- **Scarf Body Collision (Shift+F9)** *(early)*: the scarf keeps its float and trail but no longer clips through Hotsuma.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/v0.5/mod-menu-1.jpg"></td>
+<td width="50%"><img src="docs/screenshots/v0.5/mod-menu-2.jpg"></td>
+</tr>
+</table>
+
+### Controls
+
+- Full controller remapping.
+- Invert camera (left/right and up/down separately).
+
+### Movies
+
+- The movie viewer now plays every movie cleanly, without the pink artifacts.
+
+<p align="center">
+<img src="docs/screenshots/v0.5/movie-viewer.jpg" width="100%"></p>
+
+### Proton / Linux / Steam Deck (beta)
+
+- The launcher now works under Proton. It skips its window, asks for your ISO once, copies the files and starts the game. After that it starts the game straight away.
+- Fixed ISOs failing to load when started from RecompLauncher on Linux.
+- The game now unpacks properly under Wine/Proton.
+- This is beta: please report how it runs on your setup.
+
+### 15+ fixes
+
+- Pink boxes on the duo boss: fixed.
+- Pink square when an enemy dies at 21:9: fixed.
+- Missing textures in rushed cutscenes: fixed.
+- Freeze when changing Screen Position: fixed.
+- Freeze when switching to 4K while playing: fixed.
+- Updating over an old folder kept the old game: fixed.
+- Changing render scale in game now applies safely on restart.
+- F1 menu in exclusive fullscreen left the window the wrong size: fixed.
+- Launcher tabs could get squeezed off the bar: fixed.
+- The launcher now also starts on Windows 10 PCs without WebView2.
+- Hotkey notices and overlay text now use a proper font.
+- Resolution labels show real sizes (1920 × 1080, 3840 × 2160…).
+- The launcher can now update itself.
+
+### New defaults
+
+1440p, D3D11, 60 FPS, 16:9, V-Sync and FXAA on, Latency Reduction and the overlay on, IMAX Mode and Final Boss Balance on, SEGA logos skipped. Reset to Defaults in the launcher brings these back.
+
+### Known issues
+
+- 21:9 and wider are still experimental.
+- 8K may not fill the whole screen, and HDR turns off at 8K (looking into it).
+
+<p align="center">
+<img src="docs/screenshots/v0.5/recomplauncher.jpg" width="80%">
+<br><sub>Now on RecompLauncher.</sub></p>
 
 ---
 
