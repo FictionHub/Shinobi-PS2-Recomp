@@ -21,7 +21,7 @@
 2. Run **`Shinobi Launcher.exe`** (it is in the main folder you just unzipped).
 3. Press **Game File**, choose your own Shinobi (USA) disc image, press **Set up game files**, then **Play Game**.
 
-Already on v0.4? The launcher can update itself: press **Update** in its title bar. Your saves and settings are kept.
+Coming from v0.4? Download v0.5 once and unzip it over your old folder (your saves, settings and game files are kept). From v0.5 on, the launcher updates itself: when a new version is out, an **Update** button appears in its title bar.
 
 Everything is in this one repository: the launcher, the game program and the source code.
 
