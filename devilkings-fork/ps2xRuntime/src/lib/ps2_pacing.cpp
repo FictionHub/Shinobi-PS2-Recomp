@@ -40,14 +40,23 @@ void ps2xPaceFrame(int fps)
     LARGE_INTEGER now;
     QueryPerformanceCounter(&now);
     const int64_t period = s_freq.QuadPart / fps;
-    // A new cap, the first frame, or more than 4 frames behind (a load, the F1 menu): start the beat from now.
-    if (fps != s_lastFps || s_next == 0 || now.QuadPart - s_next > period * 4)
+    // A new cap or the first frame: the beat starts now, and this frame does not wait.
+    if (fps != s_lastFps || s_next == 0)
+    {
+        s_lastFps = fps;
         s_next = now.QuadPart;
-    s_lastFps = fps;
-    s_next += period;
-    const int64_t remaining = s_next - now.QuadPart;
-    if (remaining <= 0)
         return;
+    }
+    s_next += period;
+    // A late frame never waits (vsync, a heavy frame, a load). A little late (timer jitter, under a quarter frame), the
+    // beat is kept; later than that, the beat restarts from now, so no rushed frame follows a slow one.
+    if (now.QuadPart >= s_next)
+    {
+        if (now.QuadPart - s_next > period / 4)
+            s_next = now.QuadPart;
+        return;
+    }
+    const int64_t remaining = s_next - now.QuadPart;
     const int64_t spin = s_freq.QuadPart / 2000; // the last 0.5 ms are spun
     if (remaining > spin && s_timer)
     {

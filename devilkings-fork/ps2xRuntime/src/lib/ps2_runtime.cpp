@@ -1634,22 +1634,34 @@ static void NoteBlackBottom(const uint8_t *pixels, uint32_t width, uint32_t heig
         ++black;
     if (black >= limit)
         return; // a dark bottom, not the empty band
-    static float s_candidate = -1.0f;
-    static int s_seen = 0;
+    // The band is fixed and dark scene content can only add black rows, so the smallest count over a 2 s window is
+    // the band. A smaller band is taken at the end of a window; a bigger one only after 5 windows (10 s) in a row
+    // agree, so a dark scene does not nudge the picture down and back.
+    static float s_committed = -1.0f;
+    static float s_windowMin = 1.0f;
+    static int s_windowFrames = 0;
+    static int s_higherWindows = 0;
     const float fraction = static_cast<float>(black) / static_cast<float>(height);
-    if (std::fabs(fraction - s_candidate) < 0.004f)
-    {
-        if (++s_seen == 30)
-        {
-            g_ps2CentreShift.store(fraction * 0.5f, std::memory_order_relaxed);
-            std::fprintf(stderr, "[picture] %u of %u bottom rows black: picture moved down %.1f%%\n", black, height,
-                         fraction * 50.0f);
-        }
-    }
+    s_windowMin = std::min(s_windowMin, fraction);
+    if (++s_windowFrames < 120)
+        return;
+    const float band = s_windowMin;
+    s_windowMin = 1.0f;
+    s_windowFrames = 0;
+    bool take = false;
+    if (s_committed < 0.0f || band < s_committed - 0.001f)
+        take = true;
+    else if (band > s_committed + 0.001f)
+        take = ++s_higherWindows >= 5;
     else
+        s_higherWindows = 0;
+    if (take)
     {
-        s_candidate = fraction;
-        s_seen = 0;
+        s_committed = band;
+        s_higherWindows = 0;
+        g_ps2CentreShift.store(band * 0.5f, std::memory_order_relaxed);
+        std::fprintf(stderr, "[picture] bottom band %.1f%% of %u rows: picture moved down %.1f%%\n", band * 100.0f,
+                     height, band * 50.0f);
     }
 }
 

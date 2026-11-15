@@ -543,6 +543,9 @@ else()
     add_executable(ps2EntryRunner
         ${RUNNER_SRC_FILES}
     )
+    if(MSVC)
+        target_sources(ps2EntryRunner PRIVATE src/utf8.manifest) # LOCAL PATCH: UTF-8 code page (paths with any character)
+    endif()
 endif()
 
 if(PS2X_ENABLE_RUNNER_UNITY_BUILD)
@@ -776,6 +779,7 @@ if(WIN32 AND NOT PS2X_IS_VITA)
         src/launcher/lzma/LzmaDec.c
         src/launcher/lzma/Bra86.c
         src/launcher/launcher_icon.rc
+        src/utf8.manifest # LOCAL PATCH: UTF-8 code page (paths with any character)
     )
     target_compile_features(ShinobiLauncher PRIVATE cxx_std_20)
     target_include_directories(ShinobiLauncher PRIVATE "${PS2X_WEBVIEW2_DIR}/include")
