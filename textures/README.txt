@@ -21,4 +21,9 @@ Making a pack
    make larger versions of them (2x or 4x the size, same proportions), and keep each file's name exactly as it was.
 4. Put the new files in textures\SLUS-20459\replacements\ and restart the game.
 
+Tip: PS2 textures store transparency as 0..128, which normal upscalers get wrong (bright fringes, dark halos).
+scripts/ps2_upscale.py in the GitHub repository handles that for you with Real-ESRGAN (realesrgan-ncnn-vulkan): put it
+and Real-ESRGAN in textures\SLUS-20459 as described at the top of the script and run it. In game, Shift+F5 switches
+HD textures on and off, so you can compare.
+
 Upscaling the original textures with an upscaling tool is fine; please don't replace them with AI-generated art.

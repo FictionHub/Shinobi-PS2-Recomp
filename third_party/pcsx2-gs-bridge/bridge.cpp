@@ -3056,6 +3056,14 @@ extern "C" int rrv_pcsx2_gs_bridge_update_options(
         options.TextureFiltering = BiFiltering::PS2;
     if (const char* blend = std::getenv("RRV_PCSX2_GS_BLENDING"); blend && blend[0] >= '0' && blend[0] <= '3' && blend[1] == '\0')
         options.AccurateBlendingUnit = static_cast<AccBlendLevel>(blend[0] - '0');
+    // LOCAL PATCH (Shinobi, HD textures): RRV_PCSX2_GS_TEXTURE_REPLACE=0|1 switches texture replacement while playing.
+    // GSUpdateConfig then loads or drops the replacements and empties the hash cache, as PCSX2's own hotkey does.
+    if (const char* v = std::getenv("RRV_PCSX2_GS_TEXTURE_REPLACE"); v && (v[0] == '0' || v[0] == '1') && v[1] == ' ')
+    {
+        options.LoadTextureReplacements = v[0] == '1';
+        options.LoadTextureReplacementsAsync = true;
+        options.PrecacheTextureReplacements = true;
+    }
     const ScopedBridgeGsFpcr fpcr_guard(bridge->fp_isolated);
     GSUpdateConfig(options);
     EmuConfig.GS.UpscaleMultiplier = options.UpscaleMultiplier;
@@ -3063,6 +3071,7 @@ extern "C" int rrv_pcsx2_gs_bridge_update_options(
     EmuConfig.GS.TextureFiltering = options.TextureFiltering;
     EmuConfig.GS.HWAA1 = options.HWAA1;
     EmuConfig.GS.AccurateBlendingUnit = options.AccurateBlendingUnit;
+    EmuConfig.GS.LoadTextureReplacements = options.LoadTextureReplacements;
     std::fprintf(stderr, "[pcsx2-gs-bridge] options updated: scale=%g aniso=%u filter=%d hwaa1=%d blending=%d" "\n",
                  static_cast<double>(options.UpscaleMultiplier), static_cast<unsigned>(options.MaxAnisotropy),
                  static_cast<int>(options.TextureFiltering), options.HWAA1 ? 1 : 0,

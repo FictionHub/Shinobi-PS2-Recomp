@@ -348,8 +348,8 @@ namespace ps2x::settings
                 // PNGs in textures/SLUS-20459/replacements next to the launcher; without one nothing changes.
                 add({"video", "hd_textures", "HD texture packs",
                      "Loads replacement textures (an HD HUD, for example) from the textures folder next to the launcher. "
-                     "Without a pack installed nothing changes. Restart the game after changing it.",
-                     Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, false});
+                     "Without a pack installed nothing changes. Shift+F5 switches it while playing.",
+                     Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
                 add({"video", "dump_textures", "Save textures (for pack makers)",
                      "Saves every texture the game uses to textures/SLUS-20459/dumps, to make an HD pack from. Leave it off "
                      "to play: it slows the game while new textures appear.",

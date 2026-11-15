@@ -870,6 +870,7 @@ namespace ps2x::pcsx2gs
     uint64_t bytesSubmitted();
     bool startCapture(double seconds);
     void frameStats(uint64_t &produced, uint64_t &dropped, uint64_t &waiting);
+    void applyLiveSettings(); // LOCAL PATCH: Shift+F5 (HD textures) hands the setting to the running renderer
 }
 extern std::atomic<uint64_t> g_ps2SwapCount;
 
@@ -4796,6 +4797,15 @@ void PS2Runtime::run()
                     flip("hide_hud", "HUD", true);
                 if (IsKeyPressed(KEY_F6) && shiftKey)
                     flip("unlock_all", "Unlock everything");
+                // Shift+F5: HD texture packs on / off at once (the renderer reloads or drops them).
+                if (IsKeyPressed(KEY_F5) && shiftKey)
+                {
+                    const bool on = !ps2x::settings::getBool("video", "hd_textures");
+                    ps2x::settings::set("video", "hd_textures", on ? "true" : "false");
+                    ps2x::settings::save();
+                    ps2x::pcsx2gs::applyLiveSettings();
+                    ps2xHotkeyToast("HD textures", on);
+                }
                 if (IsKeyPressed(KEY_F7))
                     shiftKey ? flip("no_sword_hunger", "No sword hunger") : flip("hide_cinema_bars", "IMAX mode");
                 if (IsKeyPressed(KEY_F8))

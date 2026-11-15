@@ -1363,6 +1363,7 @@ namespace ps2x::pcsx2gs
         const std::string blending = ps2x::settings::get("video", "blending");
         _putenv_s("RRV_PCSX2_GS_BLENDING", blending == "minimum" ? "0" : blending == "medium" ? "2" : blending == "high" ? "3" : "1");
         _putenv_s("RRV_PCSX2_GS_DITHERING", ps2x::settings::get("video", "dithering") == "off" ? "0" : "2");
+        _putenv_s("RRV_PCSX2_GS_TEXTURE_REPLACE", ps2x::settings::getBool("video", "hd_textures") ? "1" : "0"); // Shift+F5
         Job job;
         job.kind = Job::UpdateOptions;
         std::unique_lock<std::mutex> q(s.qMutex);

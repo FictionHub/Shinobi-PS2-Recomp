@@ -2,6 +2,8 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
+**v0.5.3:** Shift+F5 switches HD textures on and off while you play, and `scripts/ps2_upscale.py` makes HD packs with PS2 transparency handled properly.
+
 **v0.5.2:** HD texture packs (drop upscaled textures, like an HD HUD, into the `textures` folder; `textures/README.txt` explains how to make one), and a download 40% smaller (111 MB to 67 MB) with nothing taken out.
 
 **v0.5.1:** no more AVX2 requirement. The launcher picks the right build for your CPU by itself (any 64-bit CPU with SSE4.1, 2008+), and self-updates now work under Proton too.
