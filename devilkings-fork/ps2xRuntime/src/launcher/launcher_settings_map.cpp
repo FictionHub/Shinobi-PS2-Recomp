@@ -107,6 +107,8 @@ namespace launcher
            << ",unlockall:" << b(truthy(get("game", "unlock_all", "false")))
            << ",fairboss:" << b(truthy(get("game", "fair_final_boss", "true")))
            << ",infhealth:" << b(truthy(get("game", "infinite_health", "false")))
+           << ",hdtex:" << b(truthy(get("video", "hd_textures", "true")))
+           << ",dumptex:" << b(truthy(get("video", "dump_textures", "false")))
            << ",fg:" << b(truthy(get("video", "frame_generation", "false")))
            << ",lowlat:" << b(truthy(get("video", "low_latency", "true")))
            << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
@@ -196,6 +198,8 @@ namespace launcher
             set("game", "unlock_all", b(get("unlockall", "0") == "1"));
             set("game", "fair_final_boss", b(get("fairboss", "1") == "1"));
             set("game", "infinite_health", b(get("infhealth", "0") == "1"));
+            set("video", "hd_textures", b(get("hdtex", "1") == "1"));
+            set("video", "dump_textures", b(get("dumptex", "0") == "1"));
             set("video", "frame_generation", b(get("fg", "0") == "1"));
             set("video", "low_latency", b(get("lowlat", "1") == "1"));
             {

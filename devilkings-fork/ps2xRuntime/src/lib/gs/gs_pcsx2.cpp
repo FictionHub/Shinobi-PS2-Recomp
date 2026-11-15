@@ -502,6 +502,36 @@ namespace ps2x::pcsx2gs
                 }
             }
 #endif
+            // LOCAL PATCH (HD textures): PCSX2's texture replacement. Packs live in the "textures" folder next to the launcher
+            // (the game runs in game/, so ../textures): textures/SLUS-20459/replacements/*.png. [video] hd_textures loads
+            // them (on: without a pack nothing changes), [video] dump_textures saves every texture the game uses to
+            // textures/SLUS-20459/dumps for pack makers. Environment variables set by hand win.
+#ifdef _WIN32
+            {
+                if (!std::getenv("RRV_PCSX2_GS_TEXTURE_SERIAL"))
+                    _putenv_s("RRV_PCSX2_GS_TEXTURE_SERIAL", "SLUS-20459");
+                if (!std::getenv("RRV_PCSX2_GS_TEXTURES_DIR"))
+                {
+                    std::error_code ec;
+                    const std::filesystem::path dir = std::filesystem::absolute("../textures", ec).lexically_normal();
+                    if (!ec)
+                    {
+                        // UTF-8, as PCSX2 reads paths (path::string() would throw for a folder name outside the PC's
+                        // code page, e.g. Japanese or accented letters, and crash the game at start-up).
+                        const std::u8string utf8 = dir.u8string();
+                        _putenv_s("RRV_PCSX2_GS_TEXTURES_DIR",
+                                  std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size()).c_str());
+                    }
+                }
+                if (!std::getenv("RRV_PCSX2_GS_TEXTURE_REPLACE"))
+                    _putenv_s("RRV_PCSX2_GS_TEXTURE_REPLACE", ps2x::settings::getBool("video", "hd_textures") ? "1" : "0");
+                if (!std::getenv("RRV_PCSX2_GS_TEXTURE_DUMP"))
+                    _putenv_s("RRV_PCSX2_GS_TEXTURE_DUMP", ps2x::settings::getBool("video", "dump_textures") ? "1" : "0");
+                const char *folder = std::getenv("RRV_PCSX2_GS_TEXTURES_DIR");
+                std::fprintf(stderr, "[textures] folder %s, HD packs %s, saving %s\n", folder ? folder : "(none)",
+                             std::getenv("RRV_PCSX2_GS_TEXTURE_REPLACE"), std::getenv("RRV_PCSX2_GS_TEXTURE_DUMP"));
+            }
+#endif
 #ifdef _WIN32
             // LOCAL PATCH (4K/8K): the picture brought back from the graphics card each frame is capped at the largest
             // screen's real resolution (shape kept). Above that the window can only shrink it again, and at 6x/12x the

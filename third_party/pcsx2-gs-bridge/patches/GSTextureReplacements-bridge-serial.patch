@@ -1,0 +1,40 @@
+diff --git a/pcsx2/GS/Renderers/HW/GSTextureReplacements.cpp b/pcsx2/GS/Renderers/HW/GSTextureReplacements.cpp
+index 41c98cac8..2356a046d 100644
+--- a/pcsx2/GS/Renderers/HW/GSTextureReplacements.cpp
++++ b/pcsx2/GS/Renderers/HW/GSTextureReplacements.cpp
+@@ -259,6 +259,17 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
+ 	return std::nullopt;
+ }
+ 
++// LOCAL PATCH (Shinobi bridge): there is no VM in the bridge, so VMManager::GetDiscSerial() is empty and replacement
++// would switch itself off. The host passes the serial instead (RRV_PCSX2_GS_TEXTURE_SERIAL, e.g. SLUS-20459).
++static std::string BridgeDiscSerial()
++{
++	std::string serial = VMManager::GetDiscSerial();
++	if (serial.empty())
++		if (const char* env = std::getenv("RRV_PCSX2_GS_TEXTURE_SERIAL"); env && env[0] != '\0')
++			serial = env;
++	return serial;
++}
++
+ std::string GSTextureReplacements::GetGameTextureDirectory()
+ {
+ 	return Path::Combine(EmuFolders::Textures, s_current_serial);
+@@ -332,7 +343,7 @@ std::string GSTextureReplacements::GetDumpFilename(const TextureName& name, u32
+ 
+ void GSTextureReplacements::Initialize()
+ {
+-	s_current_serial = VMManager::GetDiscSerial();
++	s_current_serial = BridgeDiscSerial();
+ 
+ 	if (GSConfig.DumpReplaceableTextures || GSConfig.LoadTextureReplacements)
+ 		StartWorkerThread();
+@@ -342,7 +353,7 @@ void GSTextureReplacements::Initialize()
+ 
+ void GSTextureReplacements::GameChanged()
+ {
+-	std::string new_serial = VMManager::GetDiscSerial();
++	std::string new_serial = BridgeDiscSerial();
+ 	if (s_current_serial == new_serial)
+ 		return;
+ 

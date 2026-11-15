@@ -344,6 +344,16 @@ namespace ps2x::settings
                 add({"video", "edge_aa", "Edge anti-aliasing (PCSX2)",
                      "The PS2's own edge smoothing (GS AA1) on the polygons that ask for it.", Kind::Bool, "false",
                      "RRV_PCSX2_GS_FULL_HWAA1", {}, {}, 0, 0, nullptr, true}); // LOCAL PATCH: live
+                // LOCAL PATCH (HD textures): PCSX2's texture replacement (gs_pcsx2.cpp passes these to the bridge). A pack is
+                // PNGs in textures/SLUS-20459/replacements next to the launcher; without one nothing changes.
+                add({"video", "hd_textures", "HD texture packs",
+                     "Loads replacement textures (an HD HUD, for example) from the textures folder next to the launcher. "
+                     "Without a pack installed nothing changes. Restart the game after changing it.",
+                     Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, false});
+                add({"video", "dump_textures", "Save textures (for pack makers)",
+                     "Saves every texture the game uses to textures/SLUS-20459/dumps, to make an HD pack from. Leave it off "
+                     "to play: it slows the game while new textures appear.",
+                     Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, false});
                 Definition aniso{"video", "anisotropic", "Anisotropic filtering (PCSX2)",
                                  "Sharper textures on surfaces seen at an angle (floors, walls).", Kind::Choice, "2",
                                  "RRV_PCSX2_GS_ANISO", {"off", "2", "4", "8", "16"}, {"Off", "2x", "4x", "8x", "16x"}, 0, 0,

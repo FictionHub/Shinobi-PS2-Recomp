@@ -28,6 +28,7 @@
 
 #include "launcher_dualsense.h"
 #include "launcher_update.h"
+#include "launcher_pack.h"
 #include "launcher_ini.h"
 #include "launcher_iso.h"
 #include "launcher_manual.h"
@@ -197,7 +198,8 @@ namespace
                     const uint32_t local = u32(&dir[at + 42]);
                     const std::string name(reinterpret_cast<const char *>(&dir[at + 46]), nameLen);
                     at += 46 + nameLen + extraLen + commentLen;
-                    if (name.empty() || name.find("..") != std::string::npos || name[0] == '/' || name[0] == '\\')
+                    if (name.empty() || name.find("..") != std::string::npos || name.find(':') != std::string::npos || name[0] == '/' ||
+                        name[0] == '\\')
                     {
                         ok = false;
                         break;
@@ -283,7 +285,7 @@ namespace
             }
         }
         FreeLibrary(z);
-        std::fprintf(stderr, "[launcher] unpacked %s with zlib1.dll: %s\n", zip.string().c_str(), ok ? "ok" : "FAILED");
+        std::fprintf(stderr, "[launcher] unpacked %s with zlib1.dll: %s\n", narrow(zip.wstring()).c_str(), ok ? "ok" : "FAILED");
         return ok;
     }
 
@@ -291,7 +293,11 @@ namespace
     {
         std::lock_guard<std::mutex> lock(g_unpackMutex);
         std::error_code ec;
-        const fs::path packed = g_runner.parent_path() / "Shinobi.zip";
+        // LOCAL PATCH (smaller download): bin/Shinobi.pack (both game programs, LZMA, launcher_pack.cpp) when it is there,
+        // else the older bin/Shinobi.zip (a folder from v0.5.1 or before).
+        const fs::path pack = g_runner.parent_path() / "Shinobi.pack";
+        const bool usePack = fs::exists(pack, ec);
+        const fs::path packed = usePack ? pack : g_runner.parent_path() / "Shinobi.zip";
         // LOCAL PATCH: unpacked again whenever the zip is not the one last unpacked (its size and date are kept next to it
         // in Shinobi.zip.unpacked). A new version extracted over an old folder used to keep the old Shinobi.exe, because
         // the zip was only unpacked when the exe was missing: the update's fixes never reached the game.
@@ -312,10 +318,21 @@ namespace
             std::getline(in, seen);
             if (seen == stamp)
                 return true;
-            std::fprintf(stderr, "[launcher] Shinobi.zip is newer than the unpacked game program: unpacking it again\n");
+            std::fprintf(stderr, "[launcher] %s is newer than the unpacked game program: unpacking it again\n",
+                         usePack ? "Shinobi.pack" : "Shinobi.zip");
         }
         if (!fs::exists(packed, ec))
             return false;
+        if (usePack)
+        {
+            const std::string error = launcher::pack::unpack(pack, g_runner.parent_path());
+            std::fprintf(stderr, "[launcher] unpacked Shinobi.pack: %s\n", error.empty() ? "ok" : error.c_str());
+            if (!error.empty())
+                return false;
+            std::ofstream(marker, std::ios::trunc) << stamp << "\n";
+            fs::remove(g_runner.parent_path() / "Shinobi.zip", ec); // left over from before the update: not needed any more
+            return fs::exists(g_runner, ec);
+        }
         wchar_t system[MAX_PATH] = {};
         GetSystemDirectoryW(system, MAX_PATH);
         std::wstring unpack = L"\"" + std::wstring(system) + L"\\tar.exe\" -xf \"" + packed.wstring() + L"\" -C \"" +
@@ -628,11 +645,11 @@ namespace
                         "(bin\\Shinobi-SSE4.exe) is missing. Download the latest release again.";
                 return false;
             }
-            std::fprintf(stderr, "[launcher] no AVX2: starting %s\n", runner.string().c_str());
+            std::fprintf(stderr, "[launcher] no AVX2: starting %s\n", narrow(runner.wstring()).c_str());
         }
         if (!fs::exists(runner))
         {
-            error = "Game not found: " + runner.string();
+            error = "Game not found: " + narrow(runner.wstring());
             return false;
         }
         if (truthy(g_mine.get("launcher", "diagnostics", "false")))

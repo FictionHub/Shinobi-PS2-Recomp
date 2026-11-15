@@ -771,6 +771,9 @@ if(WIN32 AND NOT PS2X_IS_VITA)
         src/launcher/launcher_ini.cpp
         src/launcher/launcher_dualsense.cpp
         src/launcher/launcher_update.cpp
+        src/launcher/launcher_pack.cpp # LOCAL PATCH: bin/Shinobi.pack (LZMA SDK below, public domain)
+        src/launcher/lzma/LzmaDec.c
+        src/launcher/lzma/Bra86.c
         src/launcher/launcher_icon.rc
     )
     target_compile_features(ShinobiLauncher PRIVATE cxx_std_20)

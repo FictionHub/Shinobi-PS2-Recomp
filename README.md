@@ -2,6 +2,8 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
+**v0.5.2:** HD texture packs (drop upscaled textures, like an HD HUD, into the `textures` folder; `textures/README.txt` explains how to make one), and a download 40% smaller (111 MB to 67 MB) with nothing taken out.
+
 **v0.5.1:** no more AVX2 requirement. The launcher picks the right build for your CPU by itself (any 64-bit CPU with SSE4.1, 2008+), and self-updates now work under Proton too.
 
 **v0.5 is out:** Frame Generation (360 FPS+), Latency Reduction, IMAX Mode, a Final Boss Balance mode, Infinite Health, 8 new mods on the F keys, Proton / Linux / Steam Deck (beta), a new overlay and 15+ fixes. 🔥

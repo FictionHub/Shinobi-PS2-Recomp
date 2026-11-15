@@ -1872,6 +1872,28 @@ extern "C" RrvPcsx2GsBridge* rrv_pcsx2_gs_bridge_create(
         options.AccurateBlendingUnit = static_cast<AccBlendLevel>(blend[0] - '0');
         std::fprintf(stderr, "[pcsx2-gs-bridge] blending accuracy=%c\n", blend[0]);
     }
+    // LOCAL PATCH (Shinobi, HD textures): PCSX2's texture replacement. The bridge has no VM, so the game's serial (the
+    // folder name under textures/) comes from RRV_PCSX2_GS_TEXTURE_SERIAL (GSTextureReplacements.cpp falls back to it).
+    //   RRV_PCSX2_GS_TEXTURES_DIR=<folder>   where <serial>/replacements and <serial>/dumps live
+    //   RRV_PCSX2_GS_TEXTURE_REPLACE=1       load the PNGs in <serial>/replacements in place of the game's textures
+    //   RRV_PCSX2_GS_TEXTURE_DUMP=1          save every texture the game uses to <serial>/dumps (to make a pack)
+    // A host enhancement like RRV_PCSX2_GS_ANISO, never set for oracle work.
+    if (const char* dir = std::getenv("RRV_PCSX2_GS_TEXTURES_DIR"); dir && dir[0] != '\0')
+        EmuFolders::Textures = Path::Canonicalize(dir);
+    if (const char* v = std::getenv("RRV_PCSX2_GS_TEXTURE_REPLACE"); v && std::strcmp(v, "1") == 0)
+    {
+        options.LoadTextureReplacements = true;
+        options.LoadTextureReplacementsAsync = true;
+        options.PrecacheTextureReplacements = true; // all loaded up front: no pop-in the first time a texture appears
+        std::fprintf(stderr, "[pcsx2-gs-bridge] texture replacements on (%s)\n", EmuFolders::Textures.c_str());
+    }
+    if (const char* v = std::getenv("RRV_PCSX2_GS_TEXTURE_DUMP"); v && std::strcmp(v, "1") == 0)
+    {
+        options.DumpReplaceableTextures = true;
+        options.DumpReplaceableMipmaps = false;
+        options.DumpTexturesWithFMVActive = false; // movies would flood the folder
+        std::fprintf(stderr, "[pcsx2-gs-bridge] texture dumping on (%s)\n", EmuFolders::Textures.c_str());
+    }
     // LOCAL PATCH (Shinobi): RRV_PCSX2_GS_DITHERING=0|1|2, PCSX2's dithering (Off, Scaled, Unscaled = the default).
     // Off removes the PS2's grainy colour pattern.
     if (const char* dither = std::getenv("RRV_PCSX2_GS_DITHERING");

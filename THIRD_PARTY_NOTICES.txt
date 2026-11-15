@@ -43,3 +43,6 @@ The game
     or artwork of the game, and no translated game code (a release contains it
     only inside the finished program). SEGA and PlayStation are trademarks of
     their owners; this is an unofficial fan project.
+
+LZMA SDK (launcher: unpacking bin/Shinobi.pack)
+  Igor Pavlov, https://www.7-zip.org/sdk.html - placed in the public domain.
