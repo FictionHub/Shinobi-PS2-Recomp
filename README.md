@@ -4,6 +4,10 @@
 
 **v0.6.0 is out:** Languages (Japanese, French, German, Italian, Spanish), a Jukebox for all 30 music tracks, IMAX story movies, true 1:1 mouse aiming, a rebuilt launcher and half the download (67 MB to 35 MB). **[Download v0.6.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack 1](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 235 textures, the HUD, menus and Stage 1, growing every update) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.6.0)
 
+<p align="center"><img src="docs/screenshots/v0.6/banner.jpg" width="100%"><br><sub>Shinobi PS2 Recomp v0.6.</sub></p>
+
+<p align="center"><img src="docs/screenshots/v0.6/gameplay-hd-hud-340fps.jpg" width="100%"><br><sub>Stage 1 with HD Texture Pack 1: the HD HUD, at 340 FPS with frame generation.</sub></p>
+
 **v0.5.3:** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
 
 **v0.5 is out:** Frame Generation (360 FPS+), Latency Reduction, IMAX Mode, a Final Boss Balance mode, Infinite Health, 8 new mods on the F keys, Proton / Linux / Steam Deck (beta), a new overlay and 15+ fixes. 🔥
@@ -44,6 +48,51 @@ Reddit: <https://www.reddit.com/user/Afsan23/>
 The game's own program is translated ("recompiled") to run natively on Windows. PCSX2's graphics (GS) and sound (SPU2) code is used for the parts that have to match the PS2 exactly.
 
 ---
+
+## v0.6: languages, jukebox, IMAX movies, 1:1 mouse aiming and a rebuilt launcher
+
+Everything in detail is in the [v0.6.0 release notes](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.6.0). The highlights:
+
+### HD Texture Pack 1 (pre-alpha, separate download)
+
+235 textures upscaled 4x on the GPU, with the PS2's transparency handled properly: the whole HUD, every menu, the font, the title cards and Stage 1. **[Download it here](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)**, unzip it into the game folder, and press **Shift+F5** in game to compare. It grows with every update.
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.6/hud-original.jpg"><br><sub>Original HUD</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.6/hud-hd.jpg"><br><sub>HD Texture Pack 1</sub></td></tr></table>
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.6/kunai-original.jpg"><br><sub>Original kunai counter</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.6/kunai-hd.jpg"><br><sub>HD Texture Pack 1</sub></td></tr></table>
+
+<p align="center"><img src="docs/screenshots/v0.6/title-screen-hd.jpg" width="100%"><br><sub>The title screen with HD Texture Pack 1.</sub></p>
+
+### IMAX movies
+
+IMAX mode (**F7**) now covers the pre-rendered story movies: full screen, edge to edge, subtitles laid over the picture. (The in-game story scenes are next.)
+
+<p align="center"><img src="docs/screenshots/v0.6/imax-movie.jpg" width="100%"><br><sub>A story movie in IMAX mode: no bars on any side.</sub></p>
+
+### Languages, Jukebox and sound
+
+Japanese voices and text straight from your US disc; French, German, Italian and Spanish from your own Shinobi (Europe) disc image, read live and never copied. Replace any of the 30 music tracks with your own files. A new Game Volume slider.
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.6/launcher-languages.jpg"><br><sub>Languages: voices and text chosen separately.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.6/launcher-sound-jukebox.jpg"><br><sub>Sound & Jukebox: Game Volume, launcher music and all 30 tracks.</sub></td></tr></table>
+
+### Controls
+
+True 1:1 mouse aiming, WASD, Shift / Ctrl / Alt binds, controller detection with the right button names, DualSense menu haptics and haptics settings in the Mod Menu. Inverted camera now works with the mouse as well as the controller.
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.6/invert-camera.jpg"><br><sub>Invert camera left/right and up/down: now for the mouse too.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.6/game-volume-slider.jpg"><br><sub>The new Game Volume slider.</sub></td></tr></table>
+
+### The launcher, rebuilt
+
+Opens full screen (windowed), a new boot screen and theme, settings one page at a time (L1/R1), and a Feature Set page that shows everything the recomp does, the new features marked in gold, and your installed version.
+
+<p align="center"><img src="docs/screenshots/v0.6/launcher-feature-set.jpg" width="100%"><br><sub>The rebuilt launcher, on the Feature Set page.</sub></p>
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.6/launcher-boot-screen.jpg"><br><sub>The new boot screen.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.6/feature-set-new.jpg"><br><sub>New features marked with gold sparks and a NEW tag.</sub></td></tr></table>
+
+### Half the download
+
+67 MB to 35 MB: a video decoder built for this game alone (1 MB instead of 30 MB), the old-CPU build fetched only on the PCs that need it, unused emulator files removed, and the launcher's media re-compressed.
+
 
 ## v0.5.3: HD textures, older CPUs and a smaller download
 
