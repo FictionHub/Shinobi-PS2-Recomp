@@ -2,6 +2,8 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
+**v0.5.1:** no more AVX2 requirement. The launcher picks the right build for your CPU by itself (any 64-bit CPU with SSE4.1, 2008+), and self-updates now work under Proton too.
+
 **v0.5 is out:** Frame Generation (360 FPS+), Latency Reduction, IMAX Mode, a Final Boss Balance mode, Infinite Health, 8 new mods on the F keys, Proton / Linux / Steam Deck (beta), a new overlay and 15+ fixes. 🔥
 
 <p align="center">
@@ -177,7 +179,7 @@ v0.4 is here, as promised! Grab a drink.
 - Your own Shinobi manual (PDF), with page-flip animation, mouse-wheel zoom and controller page-turning.
 - A Game File checklist plus an "I own this copy" tick, so you know your disc image is right.
 - A proper Shinobi icon on the launcher and the game.
-- It checks your CPU supports AVX2 and tells you if it doesn't.
+- It picks the right game build for your CPU (AVX2, or the SSE4.1 fallback for older processors).
 
 <table>
 <tr>
@@ -289,9 +291,9 @@ Any issues? Tell me in the Issues tab or on Reddit, I read everything and I'll f
 ## What you need
 
 - Windows 10 or 11, 64-bit
-- A processor with AVX2: Intel Core 4th generation (2013) or newer, or AMD Ryzen. Celeron, Pentium and Atom chips usually do not have it, and the launcher will tell you
+- Any 64-bit processor with SSE4.1 (Intel Core 2 from 2008, AMD from 2011, or newer: the same minimum as PCSX2). With AVX2 (Intel Core 4th generation, 2013+, or any AMD Ryzen) the launcher starts the faster build; without it, it starts the fallback build by itself. No choice to make.
 - A graphics card with Direct3D 11 (default) or Vulkan
-- Microsoft Edge WebView2 Runtime (part of Windows 11)
+- Microsoft Edge WebView2 Runtime (part of Windows 11; without it the launcher still sets up and starts the game, just without its window)
 - The Microsoft Visual C++ Redistributable (x64), which most PCs already have
 - Your own disc image of Shinobi (USA), `.iso` (or `.bin` / `.img` with raw sectors)
 - About 1.5 GB free space, plus saves

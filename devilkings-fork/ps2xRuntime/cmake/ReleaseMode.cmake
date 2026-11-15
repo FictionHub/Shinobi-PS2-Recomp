@@ -4,6 +4,17 @@ check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_ERROR)
 
 # LOCAL CHANGE: whole-program optimization (/GL + /LTCG, IPO) defers all code generation to a
 # single-threaded link, which is impractically slow for ~57k generated functions. Off by default.
+# LOCAL PATCH: PS2X_BASELINE_CPU=ON builds for any x64 CPU with SSE4.1 (2008+, the same minimum as PCSX2) instead of
+# AVX2: the fallback game program the launcher starts on CPUs without AVX2 (bin/Shinobi-SSE4.exe).
+option(PS2X_BASELINE_CPU "Build for SSE4.1 CPUs (no AVX2): the fallback game program" OFF)
+if(PS2X_BASELINE_CPU)
+    set(PS2X_ARCH_FLAG "")
+    set(PS2X_CLANG_ARCH_FLAG "-msse4.1")
+else()
+    set(PS2X_ARCH_FLAG "/arch:AVX2")
+    set(PS2X_CLANG_ARCH_FLAG "/arch:AVX2")
+endif()
+
 option(PS2X_ENABLE_LTO "Whole-program optimization (/GL, /LTCG, IPO) for Release builds" OFF)
 
 function(EnableFastReleaseMode TargetName)
@@ -21,7 +32,7 @@ function(EnableFastReleaseMode TargetName)
                 /Zc:inline # remove unreferenced inline
                 /fp:fast # fast math (graphics friendly)
                 /DNDEBUG
-                /arch:AVX2 # Advanced Vector Extensions 2
+                ${PS2X_ARCH_FLAG} # AVX2, or nothing for the SSE4.1 fallback build (PS2X_BASELINE_CPU)
                 /GS- # Disable Buffer Security Check (faster)
                 /Qspectre- # Disable Spectre mitigations (faster)
             >

@@ -511,7 +511,7 @@ if(_ps2x_vu1_clang)
         add_custom_command(
             OUTPUT "${_obj}"
             COMMAND "${_ps2x_vu1_clang}" /nologo /c /O2 /Ob2 /Oi /Gy /Gw /GF /DNDEBUG /DWIN32 /D_WINDOWS /EHsc
-                    -std:c++20 /MD /arch:AVX2 /GS- /Z7 -DPLATFORM_DESKTOP -DPS2X_HAVE_PGS=1
+                    -std:c++20 /MD ${PS2X_CLANG_ARCH_FLAG} /GS- /Z7 -DPLATFORM_DESKTOP -DPS2X_HAVE_PGS=1
                     "-I${CMAKE_CURRENT_SOURCE_DIR}/include" "-I${CMAKE_CURRENT_SOURCE_DIR}/src/lib/Kernel"
                     "-I${CMAKE_CURRENT_SOURCE_DIR}/../ps2xIOP/include"
                     "${_src}" "/Fo${_obj}"

@@ -602,11 +602,14 @@ namespace
 
     bool startGame(std::string &error)
     {
-        // The game program is built with AVX2. On a CPU without it Windows would close the game at once with no message.
-        if (!IsProcessorFeaturePresent(40 /* PF_AVX2_INSTRUCTIONS_AVAILABLE */))
+        // The game program is built twice: for AVX2 (bin/Shinobi.exe, faster) and for any SSE4.1 CPU (bin/Shinobi-SSE4.exe,
+        // 2008 and newer, the same minimum as PCSX2). On a CPU without what a program needs Windows would close it at once
+        // with no message, so the right one is picked here. SHINOBI_FORCE_SSE4=1 starts the fallback on any PC (testing).
+        const bool avx2 = IsProcessorFeaturePresent(40 /* PF_AVX2_INSTRUCTIONS_AVAILABLE */) && !_wgetenv(L"SHINOBI_FORCE_SSE4");
+        if (!avx2 && !IsProcessorFeaturePresent(37 /* PF_SSE4_1_INSTRUCTIONS_AVAILABLE */))
         {
-            error = "This PC's processor does not support AVX2, which the game needs. It runs on Intel Core 4th generation "
-                    "(2013) or newer and on AMD Ryzen. Celeron, Pentium and Atom processors usually do not have it.";
+            error = "This PC's processor is too old for the game: it needs SSE4.1 (Intel Core 2 from 2008, AMD from 2011, "
+                    "or newer), the same as the PCSX2 emulator.";
             return false;
         }
         if (!gameInstalled())
@@ -615,9 +618,21 @@ namespace
             return false;
         }
         unpackGameProgram(); // normally done long before (at start-up and when the game file is set up)
-        if (!fs::exists(g_runner))
+        fs::path runner = g_runner;
+        if (!avx2)
         {
-            error = "Game not found: " + g_runner.string();
+            runner = g_runner.parent_path() / "Shinobi-SSE4.exe";
+            if (!fs::exists(runner))
+            {
+                error = "This PC's processor does not support AVX2, and the version of the game for older processors "
+                        "(bin\\Shinobi-SSE4.exe) is missing. Download the latest release again.";
+                return false;
+            }
+            std::fprintf(stderr, "[launcher] no AVX2: starting %s\n", runner.string().c_str());
+        }
+        if (!fs::exists(runner))
+        {
+            error = "Game not found: " + runner.string();
             return false;
         }
         if (truthy(g_mine.get("launcher", "diagnostics", "false")))
@@ -649,8 +664,8 @@ namespace
         si.hStdOutput = nul != INVALID_HANDLE_VALUE ? nul : nullptr;
         si.hStdError = log != INVALID_HANDLE_VALUE ? log : nullptr;
         PROCESS_INFORMATION pi{};
-        std::wstring command = L"\"" + g_runner.wstring() + L"\" \"" + (g_gameDir / "SLUS_204.59").wstring() + L"\"";
-        const BOOL ok = CreateProcessW(g_runner.wstring().c_str(), command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+        std::wstring command = L"\"" + runner.wstring() + L"\" \"" + (g_gameDir / "SLUS_204.59").wstring() + L"\"";
+        const BOOL ok = CreateProcessW(runner.wstring().c_str(), command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
                                        nullptr, g_gameDir.wstring().c_str(), &si, &pi);
         if (log != INVALID_HANDLE_VALUE)
             CloseHandle(log);

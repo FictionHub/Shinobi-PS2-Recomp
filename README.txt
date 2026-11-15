@@ -62,8 +62,9 @@ Shinobi (PlayStation 2, USA) - the disc you own, made into an image file.
 ------------------------------------------------------------------------------
 
   - Windows 10 or 11, 64-bit.
-  - A processor with AVX2: Intel Core 4th generation (2013) or newer, or AMD
-    Ryzen. Celeron, Pentium and Atom chips usually do not have it.
+  - Any 64-bit processor with SSE4.1 (2008 or newer, the same as PCSX2).
+    With AVX2 (Intel Core 4th gen / AMD Ryzen) the launcher starts the faster
+    build; on older processors it starts the fallback build by itself.
   - A graphics card that supports Direct3D 11 (default) or Vulkan.
   - Microsoft Edge WebView2 Runtime for the launcher (already part of
     Windows 11; Windows 10 users can get it free from microsoft.com).
