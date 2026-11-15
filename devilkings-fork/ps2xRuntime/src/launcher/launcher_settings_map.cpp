@@ -113,6 +113,9 @@ namespace launcher
            << ",lowlat:" << b(truthy(get("video", "low_latency", "true")))
            << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
            << ",vol:" << jsonString(get("audio", "volume", "100"))
+           << ",lvoice:" << jsonString(get("language", "voice", "en"))   // LOCAL PATCH: Languages
+           << ",ltext:" << jsonString(get("language", "text", "en"))
+           << ",euDisc:" << jsonString(get("language", "eu_disc", ""))
            << ",scarf:" << jsonString(scarfColour(get("game", "scarf_color", "original")))
            << ",win:" << jsonString(get("video", "window", "borderless"))
            << ",haptics:" << b(truthy(get("input", "haptics", "true")))
@@ -207,6 +210,12 @@ namespace launcher
                 // LOCAL PATCH (issue #7): the game's volume, 0..100.
                 const int vol = std::atoi(get("vol", "100").c_str());
                 set("audio", "volume", std::to_string(std::clamp(vol, 0, 100)));
+                // LOCAL PATCH: Languages (the European disc's path is set by its own Choose button, not here).
+                const auto langCode = [](const std::string &c) {
+                    return (c == "ja" || c == "fr" || c == "de" || c == "it" || c == "es") ? c : std::string("en");
+                };
+                set("language", "voice", langCode(get("lvoice", "en")));
+                set("language", "text", langCode(get("ltext", "en")));
                 const std::string fgt = get("fgt", "monitor");
                 set("video", "framegen_target",
                     (fgt == "120" || fgt == "144" || fgt == "240" || fgt == "360" || fgt == "unlimited") ? fgt : std::string("monitor"));

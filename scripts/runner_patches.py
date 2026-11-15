@@ -411,3 +411,40 @@ n = fair_hook(DMG_PLAYER, 0x24E1A4,
               'LOCAL PATCH (infinite health)')
 print('infinite health hook added:', n, '(0 = already done)')
 
+# ---- 12. Jukebox (ps2_jukebox.cpp): which music track each ADX player starts. ADXT_StartFname(adxt, fname) starts a
+# named file (the BGMxx_yy_zz?.ADX music); the other starts (AFS index, memory, stream joint) play something else on
+# that player, so its replacement ends. The player's RNA output object (+0xC) is the stream ps2_cri_rna.cpp plays.
+JUKE = 'extern void ps2xJukeboxStart(uint8_t *rdram, uint32_t adxt, uint32_t fname); // ps2_jukebox.cpp (LOCAL PATCH)'
+n = 0
+n += fair_hook('ADXT_StartFname_0x26fe48.cpp', 0x26FE48,
+               '    { ' + JUKE + chr(10) + '      ps2xJukeboxStart(rdram, GPR_U32(ctx, 4), GPR_U32(ctx, 5)); } // LOCAL PATCH (jukebox fname)' + chr(10),
+               'LOCAL PATCH (jukebox fname)')
+for fname, pc in (('ADXT_StartAfs_0x26fd70.cpp', 0x26FD70), ('ADXT_StartSj_0x26ec88.cpp', 0x26EC88)):
+    n += fair_hook(fname, pc,
+                   '    { ' + JUKE + chr(10) + '      ps2xJukeboxStart(rdram, GPR_U32(ctx, 4), 0u); } // LOCAL PATCH (jukebox other)' + chr(10),
+                   'LOCAL PATCH (jukebox other)')
+print('jukebox hooks added:', n, '(0 = already done; 3 on a fresh runner)')
+
+# ---- 13. Languages (ps2_lang_overlay.cpp): a story movie's audio track. HySfdPlayer::setSoundChannel(this, ch) passes
+# ch (0 Japanese / 1 English on the US movies) to mwPlySetAudioCh; with another language chosen, the European movies
+# are played and their track for that language is asked for instead (0 English, 1 French, 2 German, 3 Italian, 4 Spanish).
+n = fair_hook('setSoundChannel__11HySfdPlayerFUc_0x243190.cpp', 0x243190,
+              '    { extern int ps2xLangMovieChannel(int requested); // ps2_lang_overlay.cpp (LOCAL PATCH)' + chr(10) +
+              '      SET_GPR_U32(ctx, 5, (uint32_t)ps2xLangMovieChannel((int)(GPR_U32(ctx, 5) & 0xFFu))); } // LOCAL PATCH (languages movie audio)' + chr(10),
+              'LOCAL PATCH (languages movie audio)')
+print('languages movie audio hook added:', n, '(0 = already done)')
+
+# ---- 14. 1:1 mouse aiming (ps2_runtime.cpp ps2xMouseAimX / Y). The camera reads the right stick with PadGetAnalogX2 /
+# PadGetAnalogY2 and turns value / 128 x 768 angle units a frame; just after each read, the mouse movement since the last
+# frame is added to the value (no smoothing, no top speed). _MovePad reads both; _MovePadOtherFollow (the lock-on camera)
+# reads the vertical one only.
+MOVEPAD = 'ps2__MovePad__13CCameraManageFP10CameraBasei_0x2e6640.cpp'
+OTHERFOLLOW = 'ps2__MovePadOtherFollow__13CCameraManageFP10CameraBasei_0x2e6910.cpp'
+AIMX = '    { extern int ps2xMouseAimX(int stick); SET_GPR_S32(ctx, 2, ps2xMouseAimX((int32_t)GPR_U32(ctx, 2))); } // LOCAL PATCH (mouse aim x)' + chr(10)
+AIMY = '    { extern int ps2xMouseAimY(int stick); SET_GPR_S32(ctx, 2, ps2xMouseAimY((int32_t)GPR_U32(ctx, 2))); } // LOCAL PATCH (mouse aim y)' + chr(10)
+n = 0
+n += fair_hook(MOVEPAD, 0x2E66D8, AIMX, 'LOCAL PATCH (mouse aim x)')
+n += fair_hook(MOVEPAD, 0x2E670C, AIMY, 'LOCAL PATCH (mouse aim y)')
+n += fair_hook(OTHERFOLLOW, 0x2E69A0, AIMY, 'LOCAL PATCH (mouse aim y)')
+print('mouse aim hooks added:', n, '(0 = already done; 3 on a fresh runner)')
+

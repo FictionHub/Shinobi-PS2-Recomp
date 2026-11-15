@@ -278,6 +278,8 @@ void ps2xCriRnaInstall(PS2Runtime &runtime)
     std::fprintf(stderr, "[cri-rna] streamed audio played on the PC (CRI RNA output replaced)\n");
 }
 
+bool ps2xJukeboxMix(uint32_t rna, int16_t *out, size_t frames, float gain); // ps2_jukebox.cpp (LOCAL PATCH)
+
 // The sound callback (48 kHz stereo s16): adds every playing stream to `out`.
 void ps2xCriRnaMix(int16_t *out, size_t frames)
 {
@@ -287,6 +289,9 @@ void ps2xCriRnaMix(int16_t *out, size_t frames)
     for (auto &entry : g_streams)
     {
         Stream &s = entry.second;
+        // LOCAL PATCH (Jukebox): a track the player replaced plays their file here; the game's own sound is still
+        // taken from the queue below (so ADX's clock runs on) but not added.
+        const bool replaced = s.playing && ps2xJukeboxMix(entry.first, out, frames, s.gain);
         if (!s.playing || s.count < 2u)
             continue;
         const double step = static_cast<double>(s.rate) / 48000.0;
@@ -294,7 +299,7 @@ void ps2xCriRnaMix(int16_t *out, size_t frames)
         {
             const uint32_t a = s.read, b = (s.read + 1u) % kCapacity;
             const float t = static_cast<float>(s.phase);
-            for (int c = 0; c < 2; ++c)
+            for (int c = 0; c < 2 && !replaced; ++c)
             {
                 const float v = (static_cast<float>(s.ring[a * 2u + c]) * (1.0f - t) + static_cast<float>(s.ring[b * 2u + c]) * t) * s.gain;
                 const int mixed = static_cast<int>(out[i * 2u + c]) + static_cast<int>(std::lround(v));

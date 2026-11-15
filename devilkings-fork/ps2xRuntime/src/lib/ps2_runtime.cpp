@@ -40,6 +40,7 @@
 #include "runtime/ps2_settings.h"
 #include "runtime/ps2_sysstats.h"
 extern "C" void rlDrawRenderBatchActive(void); // raylib rlgl.h: draws the queued shapes and text now
+extern "C" void rlSetBlendFactors(int glSrcFactor, int glDstFactor, int glEquation); // raylib rlgl.h (BLEND_CUSTOM)
 #include "runtime/ps2_intro_video.h"
 #include "runtime/ps2_ingame_menu.h"
 #include <memory>
@@ -623,6 +624,53 @@ extern std::atomic<long long> g_ps2CaptureTraceTick; // gs_frontend.cpp
 extern std::atomic<bool> g_ps2StageDetected;         // ps2_vu1_core.cpp
 extern std::atomic<bool> g_ps2MouseLookActive;       // Pad.cpp: the mouse is captured and turns the camera
 extern std::atomic<float> g_ps2MouseStickX;          // Pad.cpp
+
+// LOCAL PATCH: 1:1 mouse aiming. Mouse movement (pixels x the Mouse camera speed setting) waits here until the camera
+// reads its stick (CCameraManage::_MovePad / _MovePadOtherFollow, hooks in scripts/runner_patches.py), then all of it is
+// added to that reading. The game turns `value / 128 x 768` angle units a frame (65536 a turn), so one stick unit is
+// 0.033 degrees: 2 units a pixel is 0.066 degrees per pixel at 100 %. No smoothing and no top speed: a fast swipe turns
+// as far as the hand went.
+namespace
+{
+    constexpr float kMouseAimUnitsPerPixel = 2.0f;
+    std::atomic<float> g_mouseAimX{0.0f}, g_mouseAimY{0.0f};
+    std::atomic<double> g_mouseAimRead{0.0}; // when the camera last took some (GetTime)
+
+    int mouseAimTake(std::atomic<float> &pending, bool invert)
+    {
+        g_mouseAimRead.store(GetTime(), std::memory_order_relaxed);
+        const float all = pending.exchange(0.0f, std::memory_order_relaxed);
+        const float whole = std::trunc(all);
+        pending.fetch_add(all - whole, std::memory_order_relaxed); // the fraction waits for the next frame
+        return static_cast<int>(invert ? -whole : whole);
+    }
+}
+
+void ps2xMouseAimAdd(float dx, float dy)
+{
+    if (GetTime() - g_mouseAimRead.load(std::memory_order_relaxed) > 0.25)
+    {
+        g_mouseAimX.store(0.0f, std::memory_order_relaxed); // the camera is not listening: nothing piles up
+        g_mouseAimY.store(0.0f, std::memory_order_relaxed);
+    }
+    g_mouseAimX.fetch_add(dx * kMouseAimUnitsPerPixel, std::memory_order_relaxed);
+    g_mouseAimY.fetch_add(dy * kMouseAimUnitsPerPixel, std::memory_order_relaxed);
+}
+
+// From the camera hooks: the stick value the game read, plus the mouse movement since the last read.
+int ps2xMouseAimX(int stick)
+{
+    if (!g_ps2MouseLookActive.load(std::memory_order_relaxed))
+        return stick;
+    return stick + mouseAimTake(g_mouseAimX, ps2x::settings::getBool("input", "invert_camera_x"));
+}
+
+int ps2xMouseAimY(int stick)
+{
+    if (!g_ps2MouseLookActive.load(std::memory_order_relaxed))
+        return stick;
+    return stick + mouseAimTake(g_mouseAimY, ps2x::settings::getBool("input", "invert_camera_y"));
+}
 extern std::atomic<float> g_ps2MouseStickY;          // Pad.cpp
 
 // LOCAL PATCH: pictures shown whose content differs from the one before. The title's first number counts every refresh of
@@ -1665,6 +1713,119 @@ static void NoteBlackBottom(const uint8_t *pixels, uint32_t width, uint32_t heig
     }
 }
 
+// LOCAL PATCH (IMAX mode for movies): Shinobi's story movies are 640x320 files the game shows in the middle of its
+// 448-line picture, black above and below; a 16:9 or wider screen then stretched the whole picture, bars included, so
+// the movie looked squashed. With IMAX mode on, the window shows only the movie's rows, at their own shape. The first
+// 20 pictures of a movie are left alone (the screen before it may still be showing), then the movie's own rows are
+// used; if the picture is seen outside them for 5 pictures (a movie drawn larger), the rows it really covers (measured,
+// the widest seen) are used instead, and a measurement that makes no sense leaves the movie whole.
+bool ps2xMoviePlaying(uint32_t &width, uint32_t &height); // Kernel/Stubs/MPEG.cpp
+static std::atomic<float> g_ps2MovieCutTop{0.0f};        // share of the picture's rows cut at the top
+static std::atomic<float> g_ps2MovieCutBottom{0.0f};     // and at the bottom (0 = the whole picture)
+static std::atomic<bool> g_ps2MovieSubtitles{false};     // subtitles under the movie now: drawn over it (IMAX mode)
+
+static void NoteMovieBars(const uint8_t *pixels, uint32_t width, uint32_t height)
+{
+    static uint32_t s_quiet = 0u, s_frames = 0u, s_outside = 0u, s_height = 0u, s_subsHold = 0u;
+    static uint32_t s_top = ~0u, s_bottom = ~0u;
+    static int s_logged = -1; // 0 whole, 1 the movie's rows, 2 measured rows
+    const auto set = [](float top, float bottom) {
+        g_ps2MovieCutTop.store(top, std::memory_order_relaxed);
+        g_ps2MovieCutBottom.store(bottom, std::memory_order_relaxed);
+    };
+    uint32_t movieWidth = 0u, movieHeight = 0u;
+    if (!ps2xMoviePlaying(movieWidth, movieHeight))
+    {
+        if (++s_quiet > 60u) // the next movie starts afresh
+        {
+            s_frames = s_outside = 0u;
+            s_top = s_bottom = ~0u;
+            s_logged = -1;
+        }
+        set(0.0f, 0.0f);
+        return;
+    }
+    s_quiet = 0u;
+    // Only the letterboxed movie files (the full-screen trailers are 640x448).
+    if (!pixels || width < 16u || height < 64u || movieWidth < 600u || movieHeight == 0u || movieHeight >= 430u)
+    {
+        set(0.0f, 0.0f);
+        return;
+    }
+    if (height != s_height) // the picture's size changed: start again
+    {
+        s_height = height;
+        s_frames = s_outside = 0u;
+        s_top = s_bottom = ~0u;
+    }
+    if (++s_frames <= 20u)
+    {
+        set(0.0f, 0.0f);
+        return;
+    }
+    const float cut = 0.5f * (1.0f - static_cast<float>(movieHeight) / 448.0f); // the movie's own rows, centred
+    const uint32_t bar = static_cast<uint32_t>(cut * static_cast<float>(height));
+    const uint32_t step = std::max<uint32_t>(1u, width / 160u);
+    const auto lit = [&](uint32_t y) {
+        const uint8_t *row = pixels + static_cast<size_t>(y) * width * 4u;
+        for (uint32_t x = 0; x < width; x += step)
+        {
+            const uint8_t *p = row + static_cast<size_t>(x) * 4u;
+            if (p[0] > 24u || p[1] > 24u || p[2] > 24u)
+                return true;
+        }
+        return false;
+    };
+    uint32_t first = 0u;
+    while (first < height && !lit(first))
+        ++first;
+    if (first < height)
+    {
+        uint32_t last = height - 1u;
+        while (last > first && !lit(last))
+            --last;
+        const uint32_t below = height - 1u - last;
+        s_top = std::min(s_top, first);
+        s_bottom = std::min(s_bottom, below);
+        const uint32_t margin = 3u + height / 200u; // the scaled edge is soft
+        const bool topOut = first + margin < bar, bottomOut = below + margin < bar;
+        if (topOut && bottomOut)
+            ++s_outside; // the picture goes past the movie on both sides: drawn larger
+        else if (bottomOut)
+            s_subsHold = 20u; // only under it: subtitles (kept a moment, so a gap between lines does not flicker)
+    }
+    if (s_subsHold > 0u)
+        --s_subsHold;
+    g_ps2MovieSubtitles.store(s_subsHold > 0u, std::memory_order_relaxed);
+    if (s_outside < 5u)
+    {
+        if (s_logged != 1)
+            std::fprintf(stderr, "[movie] %ux%u movie: shown without its bars in IMAX mode (%.2f:1)\n", movieWidth,
+                         movieHeight, (4.0f / 3.0f) / (1.0f - 2.0f * cut));
+        s_logged = 1;
+        set(cut, cut);
+        return;
+    }
+    // The picture reaches past the movie's own rows: the rows it really covers.
+    const float top = static_cast<float>(s_top > 1u ? s_top - 1u : 0u) / static_cast<float>(height);
+    const float bottom = static_cast<float>(s_bottom > 1u ? s_bottom - 1u : 0u) / static_cast<float>(height);
+    const float shape = (4.0f / 3.0f) / std::max(0.05f, 1.0f - top - bottom);
+    if (top + bottom < 0.04f || top > 0.3f || bottom > 0.3f || shape < 1.45f || shape > 2.6f)
+    {
+        if (s_logged != 0)
+            std::fprintf(stderr, "[movie] picture rows %u..%u of %u: not a letterbox, shown whole\n", s_top,
+                         height - 1u - s_bottom, height);
+        s_logged = 0;
+        set(0.0f, 0.0f);
+        return;
+    }
+    if (s_logged != 2)
+        std::fprintf(stderr, "[movie] picture rows %u..%u of %u, larger than the movie: those rows shown (%.2f:1)\n",
+                     s_top, height - 1u - s_bottom, height, shape);
+    s_logged = 2;
+    set(top, bottom);
+}
+
 static void UploadVulkanFrame(Texture2D &tex, uint64_t currentTick, uint32_t &outWidth, uint32_t &outHeight)
 {
     static std::vector<uint8_t> s_frame;
@@ -1719,6 +1880,7 @@ static void UploadVulkanFrame(Texture2D &tex, uint64_t currentTick, uint32_t &ou
         s_height = height;
         DumpPresentedFrame(currentTick, pixels, width, height, width * 4u, 0u);
         NoteBlackBottom(pixels, width, height); // LOCAL PATCH: issue #8, the picture centred
+        NoteMovieBars(pixels, width, height);   // LOCAL PATCH: IMAX mode for movies
     }
     outWidth = s_width != 0u ? s_width : FB_WIDTH;
     outHeight = s_height != 0u ? s_height : DEFAULT_DISPLAY_HEIGHT;
@@ -4226,7 +4388,8 @@ void main()
             if (filtered && IsShaderValid(shader))
             {
                 const float size[2] = {static_cast<float>(frameTex.width), static_cast<float>(frameTex.height)};
-                const float corner[2] = {src.width / size[0], src.height / size[1]};
+                // the far corner of the picture (src can start inside the texture: IMAX mode crops movies)
+                const float corner[2] = {(src.x + src.width) / size[0], (src.y + src.height) / size[1]};
                 const int fxaa = antialias ? 1 : 0;
                 SetShaderValue(shader, uniformTextureSize, size, SHADER_UNIFORM_VEC2);
                 SetShaderValue(shader, uniformPictureUv, corner, SHADER_UNIFORM_VEC2);
@@ -4739,13 +4902,58 @@ void PS2Runtime::run()
             dstWidth = std::min(screenWidth, screenHeight * shape);
             dstHeight = dstWidth / shape;
         }
-        const Rectangle srcRect{0.0f, 0.0f, srcWidth, srcHeight};
+        Rectangle srcRect{0.0f, 0.0f, srcWidth, srcHeight};
+        float centreShift = g_ps2CentreShift.load(std::memory_order_relaxed); // issue #8
+        bool movieSubtitles = false; // IMAX mode: the movie's subtitles drawn over its bottom (see below)
+        Rectangle subtitleSrc{};
+        // LOCAL PATCH (IMAX mode for movies, see NoteMovieBars): only the movie's rows, at the movie's own shape. It
+        // fills the screen when that takes at most 6% off the movie's sides (1.87:1 on 16:9: 2.4% a side); a wider
+        // screen gets bars at the sides, a narrower one small bars above and below.
+        {
+            static uint64_t s_imaxVersion = ~0ull;
+            static bool s_imax = false;
+            if (const uint64_t v = ps2x::settings::version(); v != s_imaxVersion)
+            {
+                s_imaxVersion = v;
+                s_imax = ps2x::settings::getBool("game", "hide_cinema_bars");
+            }
+            const float cutTop = s_imax ? g_ps2MovieCutTop.load(std::memory_order_relaxed) : 0.0f;
+            const float cutBottom = s_imax ? g_ps2MovieCutBottom.load(std::memory_order_relaxed) : 0.0f;
+            if (cutTop + cutBottom > 0.0f && screenWidth > 0.0f && screenHeight > 0.0f)
+            {
+                // The movie's rows over the picture's usual width (the whole screen in 16:9 / 21:9) and the screen's
+                // whole height: no bars anywhere (the movie is stretched to the screen's shape, as the game's own
+                // widescreen picture is).
+                const float kept = 1.0f - cutTop - cutBottom;
+                srcRect = Rectangle{0.0f, srcHeight * cutTop, srcWidth, srcHeight * kept};
+                dstHeight = screenHeight;
+                centreShift = 0.0f;
+                if (cutBottom > 0.0f && g_ps2MovieSubtitles.load(std::memory_order_relaxed))
+                {
+                    movieSubtitles = true;
+                    subtitleSrc = Rectangle{srcRect.x, srcHeight * (1.0f - cutBottom), srcRect.width, srcHeight * cutBottom};
+                }
+            }
+        }
         const Rectangle dstRect{
             (screenWidth - dstWidth) * 0.5f,
-            (screenHeight - dstHeight) * 0.5f + g_ps2CentreShift.load(std::memory_order_relaxed) * dstHeight, // issue #8
+            (screenHeight - dstHeight) * 0.5f + centreShift * dstHeight,
             dstWidth,
             dstHeight};
         presentation.drawFrame(shownTex, srcRect, dstRect);
+        // LOCAL PATCH (IMAX mode for movies): the subtitles, drawn under the movie by the game, laid over the movie's
+        // bottom at the movie's scale: a light shade behind them, then the strip with "the brighter wins" (GL_MAX), so
+        // the white letters show and the strip's black lets the movie through.
+        if (movieSubtitles && srcRect.height > 0.0f)
+        {
+            const float h = subtitleSrc.height * (dstRect.height / srcRect.height);
+            const Rectangle subtitleDst{dstRect.x, dstRect.y + dstRect.height - h - dstRect.height * 0.02f, dstRect.width, h};
+            DrawRectangleRec(subtitleDst, Fade(BLACK, 0.35f));
+            rlSetBlendFactors(1 /* GL_ONE */, 1 /* GL_ONE */, 0x8008 /* GL_MAX */);
+            BeginBlendMode(BLEND_CUSTOM);
+            DrawTexturePro(shownTex, subtitleSrc, subtitleDst, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
+            EndBlendMode();
+        }
         presentation.drawFps(dstRect);
         ps2xDrawHotkeyToast();
         if (ps2x::ingame::isOpen()) // the game dimmed behind the in-game menu
@@ -4951,18 +5159,17 @@ void PS2Runtime::run()
                         EnableCursor();
                     s_captured = want;
                 }
+                // LOCAL PATCH: 1:1 mouse aiming. The mouse no longer pretends to be the stick (smoothed and capped at a
+                // full push): every bit of its movement is collected here and handed to the camera, all of it, the next
+                // time the game reads the stick for the camera (ps2xMouseAimX / Y, hooks in CCameraManage::_MovePad).
+                // Movement the camera has not asked for in a while (a cutscene, a menu) is dropped, so it never jumps.
+                s_x = 0.0f;
+                s_y = 0.0f;
                 if (s_captured)
                 {
                     const Vector2 delta = GetMouseDelta();
                     const float sensitivity = static_cast<float>(std::clamp(ps2x::settings::getNumber("input", "mouse_sensitivity"), 10, 400)) / 100.0f;
-                    // About 18 pixels of movement per frame is a fully pushed stick at 100 %.
-                    s_x = s_x * 0.5f + std::clamp(delta.x / 18.0f * sensitivity, -1.0f, 1.0f) * 0.5f;
-                    s_y = s_y * 0.5f + std::clamp(delta.y / 18.0f * sensitivity, -1.0f, 1.0f) * 0.5f;
-                }
-                else
-                {
-                    s_x = 0.0f;
-                    s_y = 0.0f;
+                    ps2xMouseAimAdd(delta.x * sensitivity, delta.y * sensitivity);
                 }
                 g_ps2MouseStickX.store(s_x, std::memory_order_relaxed);
                 g_ps2MouseStickY.store(s_y, std::memory_order_relaxed);
@@ -5052,6 +5259,63 @@ void PS2Runtime::run()
                         now[7] |= ds.r1;
                         now[8] |= ds.options;
                     }
+                }
+                // LOCAL PATCH: the page shows L1 / R1 or LB / RB for its pages: the kind of controller in use, sent when it
+                // changes (and each time the menu opens). Logged too, so a controller switched on later can be checked.
+                {
+                    static int s_kind = -1; // 0 none, 1 PlayStation, 2 other
+                    int kind = 0;
+                    Ps2xDualSenseInput probe{};
+                    if (::ps2xDualSenseRead(probe))
+                        kind = 1;
+                    for (int pad = 0; pad < 8 && kind == 0; ++pad)
+                    {
+                        if (!IsGamepadAvailable(pad))
+                            continue;
+                        std::string name = GetGamepadName(pad) ? GetGamepadName(pad) : "";
+                        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                        const bool sony = name.find("dualsense") != std::string::npos || name.find("dualshock") != std::string::npos ||
+                                          name.find("ps4") != std::string::npos || name.find("ps5") != std::string::npos ||
+                                          name.find("playstation") != std::string::npos || name.find("wireless controller") != std::string::npos ||
+                                          name.find("sony") != std::string::npos;
+                        const bool nintendo = name.find("nintendo") != std::string::npos || name.find("pro controller") != std::string::npos ||
+                                              name.find("joy-con") != std::string::npos || name.find("switch") != std::string::npos;
+                        kind = sony ? 1 : nintendo ? 3 : 2;
+                    }
+                    if (kind != s_kind || !s_wasOpen)
+                    {
+                        if (kind != s_kind)
+                            std::fprintf(stderr, "[menu] controller: %s\n", kind == 1 ? "PlayStation" : kind == 3 ? "Nintendo" : kind == 2 ? "Xbox-style" : "none");
+                        s_kind = kind;
+                        ps2x::ingame::padEvent(kind == 1 ? "kind-ps" : kind == 3 ? "kind-nintendo" : kind == 2 ? "kind-xbox" : "kind-none");
+                    }
+                }
+                // LOCAL PATCH: the right stick (up / down) scrolls the page's lists: sent about 60 times a second while
+                // held, and once more (0) when let go.
+                {
+                    float rightY = 0.0f;
+                    Ps2xDualSenseInput stick{};
+                    if (::ps2xDualSenseRead(stick))
+                        rightY = (stick.ry - 127.5f) / 127.5f;
+                    for (int pad = 0; pad < 8; ++pad)
+                        if (IsGamepadAvailable(pad))
+                        {
+                            const float v = GetGamepadAxisMovement(pad, GAMEPAD_AXIS_RIGHT_Y);
+                            if (std::fabs(v) > std::fabs(rightY))
+                                rightY = v;
+                        }
+                    static double s_lastStick = 0.0;
+                    static bool s_stickHeld = false;
+                    const bool stickHeld = std::fabs(rightY) > 0.2f;
+                    const double ts = GetTime();
+                    if (stickHeld && ts - s_lastStick >= 0.016)
+                    {
+                        s_lastStick = ts;
+                        ps2x::ingame::padEvent(("rsy:" + std::to_string(static_cast<int>(rightY * 100.0f))).c_str());
+                    }
+                    else if (!stickHeld && s_stickHeld)
+                        ps2x::ingame::padEvent("rsy:0");
+                    s_stickHeld = stickHeld;
                 }
                 const double t = GetTime();
                 for (int i = 0; i < 9; ++i)

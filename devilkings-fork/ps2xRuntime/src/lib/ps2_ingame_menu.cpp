@@ -32,6 +32,8 @@
 #include "WebView2EnvironmentOptions.h"
 #endif
 
+void ps2xHapticPulse(float left, float right, float ms, float delayMs); // ps2_dualsense.cpp (LOCAL PATCH: menu haptics)
+
 namespace ps2x::pcsx2gs
 {
     void applyLiveSettings(); // gs_pcsx2.cpp
@@ -163,6 +165,24 @@ namespace ps2x::ingame
             }
             else if (command == "quit")
                 g_request = Request::Quit;
+            else if (command == "hap")
+            {
+                // LOCAL PATCH: menu haptics on the game's own HD haptics (ps2_dualsense.cpp; its switch and strength
+                // apply there). kind: move | bead | tab | press | back; v: 0..100 (bead speed).
+                const std::string kind = values["kind"];
+                const float speed = static_cast<float>(std::clamp(std::atoi(values["v"].c_str()), 0, 100)) / 100.0f;
+                // both actuators together: one centred thump (as the launcher)
+                if (kind == "move")
+                    ps2xHapticPulse(0.95f, 0.95f, 55.0f, 0.0f);
+                else if (kind == "bead")
+                    ps2xHapticPulse(0.70f + 0.30f * speed, 0.70f + 0.30f * speed, 32.0f, 0.0f);
+                else if (kind == "tab")
+                    ps2xHapticPulse(1.0f, 1.0f, 80.0f, 0.0f);
+                else if (kind == "press")
+                    ps2xHapticPulse(1.0f, 1.0f, 65.0f, 0.0f);
+                else if (kind == "back")
+                    ps2xHapticPulse(0.80f, 0.80f, 50.0f, 0.0f);
+            }
             else if (command == "manual")
             {
                 // LOCAL PATCH: the manual's pages as the launcher prepared them (game/manual/page_NNN.png).

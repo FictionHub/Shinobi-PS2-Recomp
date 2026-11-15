@@ -16,12 +16,16 @@ extern "C"
 }
 #endif
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <memory>
 
 #include "Syscalls/Helpers/State.h"
+
+void ps2xNoteMoviePicture(uint32_t width, uint32_t height); // LOCAL PATCH: IMAX mode for movies (end of this file)
 
 namespace ps2_stubs
 {
@@ -2581,6 +2585,7 @@ namespace ps2_stubs
                 height = playback.height;
                 frameCount = playback.picturesServed;
                 playback.picturesServed += 1u;
+                ps2xNoteMoviePicture(width, height); // LOCAL PATCH: IMAX mode for movies
                 playback.nextPictureTickQ32 = presentationTargetQ32 + frameIntervalQ32;
                 playback.presentationEndTickQ32 = playback.nextPictureTickQ32;
                 haveFrame = true;
@@ -2804,4 +2809,36 @@ namespace ps2_stubs
         getPlaybackState(mpegAddr).imageBufferAddr = imageBufferAddr;
         setReturnS32(ctx, 0);
     }
+}
+
+// LOCAL PATCH (IMAX mode for movies): when the last movie picture was handed to the game, and its size. Shinobi's story
+// movies are 640x320 and the game shows them in the middle of its 448-line picture; the window loop (ps2_runtime.cpp)
+// uses this to show only the movie's rows, at the movie's own shape, while one plays.
+static std::atomic<int64_t> g_ps2xMoviePictureMs{0};
+static std::atomic<uint32_t> g_ps2xMovieSize{0}; // width << 16 | height
+
+void ps2xNoteMoviePicture(uint32_t width, uint32_t height)
+{
+    const int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now().time_since_epoch())
+                           .count();
+    g_ps2xMovieSize.store(((width & 0xFFFFu) << 16) | (height & 0xFFFFu), std::memory_order_relaxed);
+    g_ps2xMoviePictureMs.store(ms, std::memory_order_relaxed);
+}
+
+// True while a movie is playing (a picture in the last 300 ms); its picture size in width / height.
+bool ps2xMoviePlaying(uint32_t &width, uint32_t &height)
+{
+    const int64_t last = g_ps2xMoviePictureMs.load(std::memory_order_relaxed);
+    if (last == 0)
+        return false;
+    const int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now().time_since_epoch())
+                           .count();
+    if (ms - last > 300)
+        return false;
+    const uint32_t size = g_ps2xMovieSize.load(std::memory_order_relaxed);
+    width = size >> 16;
+    height = size & 0xFFFFu;
+    return true;
 }

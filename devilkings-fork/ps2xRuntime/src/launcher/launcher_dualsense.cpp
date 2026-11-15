@@ -12,8 +12,12 @@
 #include <setupapi.h>
 #include <hidsdi.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstring>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -28,7 +32,160 @@ namespace launcher::dualsense
         std::atomic<bool> g_running{false};
         std::thread g_thread;
 
-        HANDLE openPad(bool &bluetooth)
+        // ---- LOCAL PATCH: menu haptics. Short taps on the controller while the page is driven with it (a thump per
+        // move, beads while the right stick scrolls). A DualSense gets the vibration-emulation output report (the game's
+        // layout, ps2_dualsense.cpp: 0x02 over USB, 0x31 + CRC32 over Bluetooth) through a write handle of its own, so a
+        // tap never waits behind the reader's ReadFile; an Xbox-style pad gets XInput rumble.
+        std::mutex g_outLock;
+        std::condition_variable g_outWake;
+        std::wstring g_outPath;
+        bool g_outBluetooth = false;
+        USHORT g_outLength = 0;
+        uint8_t g_btSeq = 0;
+        struct Tap
+        {
+            uint8_t left = 0, right = 0;
+            int ms = 0;
+            uint64_t serial = 0;
+        } g_tap;
+        bool g_outStarted = false;
+
+        uint32_t crc32(const uint8_t *data, size_t n, uint32_t crc = 0xFFFFFFFFu)
+        {
+            for (size_t i = 0; i < n; ++i)
+            {
+                crc ^= data[i];
+                for (int k = 0; k < 8; ++k)
+                    crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+            }
+            return crc;
+        }
+
+        bool rumbleDualSense(HANDLE h, bool bt, USHORT len, uint8_t left, uint8_t right)
+        {
+            if (h == INVALID_HANDLE_VALUE)
+                return false;
+            uint8_t report[80] = {};
+            uint8_t *c = nullptr;
+            DWORD size = 0;
+            if (bt)
+            {
+                report[0] = 0x31;
+                report[1] = static_cast<uint8_t>(g_btSeq << 4);
+                g_btSeq = static_cast<uint8_t>((g_btSeq + 1u) & 15u);
+                report[2] = 0x10;
+                c = report + 3;
+            }
+            else
+            {
+                report[0] = 0x02;
+                c = report + 1;
+            }
+            // In vibration emulation the left actuator (the "big motor") hits far harder than the right one, so equal
+            // levels are felt on the left only: the left is turned well down and the right kept at full, so a tap is
+            // felt in the centre of the pad.
+            left = static_cast<uint8_t>(left * 0.40f);
+            c[0] = 0x01 | 0x02; // vibration emulation + haptics select (the triggers are left alone)
+            c[2] = right;       // right actuator (the light, crisp one)
+            c[3] = left;        // left actuator (the heavy one)
+            c[38] = 0x04;       // improved vibration emulation (newer firmware)
+            if (bt)
+            {
+                const uint8_t seed = 0xA2;
+                const uint32_t crc = ~crc32(report, 74, crc32(&seed, 1));
+                std::memcpy(report + 74, &crc, 4);
+                size = std::max<DWORD>(78, len);
+            }
+            else
+                size = std::min<DWORD>(64, std::max<DWORD>(48, len));
+            std::vector<uint8_t> buffer(std::max<DWORD>(size, 80), 0);
+            std::memcpy(buffer.data(), report, sizeof(report));
+            DWORD written = 0;
+            return WriteFile(h, buffer.data(), size, &written, nullptr) != FALSE;
+        }
+
+        // Xbox-style pads (XInput): the same tap on their rumble motors.
+        void rumbleXInput(uint8_t left, uint8_t right)
+        {
+            struct Vibration { WORD left, right; };
+            using SetState = DWORD(WINAPI *)(DWORD, Vibration *);
+            using GetState = DWORD(WINAPI *)(DWORD, void *);
+            static SetState s_set = nullptr;
+            static GetState s_get = nullptr;
+            static bool s_loaded = false;
+            if (!s_loaded)
+            {
+                s_loaded = true;
+                for (const wchar_t *dll : {L"xinput1_4.dll", L"xinput9_1_0.dll", L"xinput1_3.dll"})
+                    if (HMODULE m = LoadLibraryW(dll))
+                    {
+                        s_set = reinterpret_cast<SetState>(GetProcAddress(m, "XInputSetState"));
+                        s_get = reinterpret_cast<GetState>(GetProcAddress(m, "XInputGetState"));
+                        break;
+                    }
+            }
+            if (!s_set || !s_get)
+                return;
+            unsigned char state[16] = {};
+            for (DWORD i = 0; i < 4; ++i)
+                if (s_get(i, state) == ERROR_SUCCESS)
+                {
+                    Vibration v{static_cast<WORD>(left * 257), static_cast<WORD>(right * 257)};
+                    s_set(i, &v);
+                }
+        }
+
+        void outputWorker()
+        {
+            HANDLE h = INVALID_HANDLE_VALUE;
+            std::wstring openedPath;
+            uint64_t played = 0;
+            std::unique_lock<std::mutex> lock(g_outLock);
+            for (;;)
+            {
+                g_outWake.wait(lock, [&] { return g_tap.serial != played; });
+                const Tap tap = g_tap;
+                played = tap.serial;
+                if (g_outPath != openedPath)
+                {
+                    if (h != INVALID_HANDLE_VALUE)
+                        CloseHandle(h);
+                    openedPath = g_outPath;
+                    h = openedPath.empty() ? INVALID_HANDLE_VALUE
+                                           : CreateFileW(openedPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                                                         OPEN_EXISTING, 0, nullptr);
+                }
+                const bool bt = g_outBluetooth;
+                const USHORT len = g_outLength;
+                lock.unlock();
+                if (!rumbleDualSense(h, bt, len, tap.left, tap.right) && h != INVALID_HANDLE_VALUE)
+                {
+                    CloseHandle(h); // the controller went away: opened again with the next one
+                    h = INVALID_HANDLE_VALUE;
+                    openedPath.clear();
+                }
+                rumbleXInput(tap.left, tap.right);
+                lock.lock();
+                // the tap's length, unless a newer tap takes over (then it simply continues with the new strength)
+                if (!g_outWake.wait_for(lock, std::chrono::milliseconds(tap.ms), [&] { return g_tap.serial != played; }))
+                {
+                    lock.unlock();
+                    rumbleDualSense(h, bt, len, 0, 0);
+                    rumbleXInput(0, 0);
+                    lock.lock();
+                }
+            }
+        }
+
+        void setOutputDevice(const std::wstring &path, bool bluetooth, USHORT length)
+        {
+            std::lock_guard<std::mutex> lock(g_outLock);
+            g_outPath = path;
+            g_outBluetooth = bluetooth;
+            g_outLength = length;
+        }
+
+        HANDLE openPad(bool &bluetooth, std::wstring *pathOut = nullptr, USHORT *outLen = nullptr)
         {
             GUID hidGuid;
             HidD_GetHidGuid(&hidGuid);
@@ -66,6 +223,10 @@ namespace launcher::dualsense
                     if (caps.UsagePage == 0x01 && caps.Usage == 0x05)
                     {
                         bluetooth = caps.OutputReportByteLength >= 78;
+                        if (pathOut)
+                            *pathOut = detail->DevicePath; // LOCAL PATCH: menu haptics write through their own handle
+                        if (outLen)
+                            *outLen = caps.OutputReportByteLength;
                         found = h;
                         continue;
                     }
@@ -78,10 +239,10 @@ namespace launcher::dualsense
 
         // The menu buttons from a report: up, down, left, right, cross, circle, l1, r1, options. False if not a report
         // with buttons (the simple Bluetooth report has them elsewhere).
-        bool decode(const uint8_t *r, DWORD size, bool bluetooth, bool out[16])
+        bool decode(const uint8_t *r, DWORD size, bool bluetooth, bool out[16], float &rightY)
         {
             const uint8_t *p = nullptr;
-            uint8_t lx = 128, ly = 128, b0 = 8, b1 = 0;
+            uint8_t lx = 128, ly = 128, ry = 128, b0 = 8, b1 = 0;
             if (r[0] == 0x31 && size >= 12)
                 p = r + 2; // full report (Bluetooth)
             else if (r[0] == 0x01 && !bluetooth && size >= 11)
@@ -90,6 +251,7 @@ namespace launcher::dualsense
             {
                 lx = p[0];
                 ly = p[1];
+                ry = p[3];
                 b0 = p[7];
                 b1 = p[8];
             }
@@ -98,11 +260,13 @@ namespace launcher::dualsense
                 // Simple Bluetooth report: sticks at 1..4, buttons at 5..6 (as a DualShock 4's).
                 lx = r[1];
                 ly = r[2];
+                ry = r[4];
                 b0 = r[5];
                 b1 = r[6];
             }
             else
                 return false;
+            rightY = (ry - 127.5f) / 127.5f; // LOCAL PATCH: the right stick scrolls lists
             const int hat = b0 & 0x0F;
             const float dx = (lx - 127.5f) / 127.5f, dy = (ly - 127.5f) / 127.5f;
             out[0] = hat == 7 || hat == 0 || hat == 1 || dy < -0.6f;
@@ -133,7 +297,9 @@ namespace launcher::dualsense
             while (g_running.load())
             {
                 bool bluetooth = false;
-                HANDLE h = openPad(bluetooth);
+                std::wstring devicePath;
+                USHORT outputLength = 0;
+                HANDLE h = openPad(bluetooth, &devicePath, &outputLength);
                 if (h == INVALID_HANDLE_VALUE)
                 {
                     for (int i = 0; i < 20 && g_running.load(); ++i)
@@ -141,6 +307,7 @@ namespace launcher::dualsense
                     continue;
                 }
                 send(L"pad:host"); // the page leaves this controller to us from now on
+                setOutputDevice(devicePath, bluetooth, outputLength); // LOCAL PATCH: menu haptics
                 bool held[16] = {};
                 double next[16] = {};
                 bool first = true;
@@ -151,8 +318,24 @@ namespace launcher::dualsense
                     if (!ReadFile(h, report.data(), static_cast<DWORD>(report.size()), &got, nullptr) || got == 0)
                         break; // disconnected
                     bool now[16] = {};
-                    if (!decode(report.data(), got, bluetooth, now))
+                    float rightY = 0.0f;
+                    if (!decode(report.data(), got, bluetooth, now, rightY))
                         continue;
+                    {
+                        // LOCAL PATCH: the right stick (up / down) for the page's lists, about 60 times a second while held.
+                        static double s_lastStick = 0.0;
+                        static bool s_stickHeld = false;
+                        const double ts = clock();
+                        const bool stickHeld = rightY > 0.2f || rightY < -0.2f;
+                        if (stickHeld && ts - s_lastStick >= 0.016)
+                        {
+                            s_lastStick = ts;
+                            send(L"pad:rsy:" + std::to_wstring(static_cast<int>(rightY * 100.0f)));
+                        }
+                        else if (!stickHeld && s_stickHeld)
+                            send(L"pad:rsy:0");
+                        s_stickHeld = stickHeld;
+                    }
                     const double t = clock();
                     for (int i = 0; i < 16; ++i)
                     {
@@ -185,6 +368,23 @@ namespace launcher::dualsense
                 send(L"pad:lost");
             }
         }
+    }
+
+    // LOCAL PATCH: a menu haptic tap: strengths 0..1 (left = heavy actuator, right = light one), `ms` long.
+    void tap(float left, float right, int ms)
+    {
+        std::lock_guard<std::mutex> lock(g_outLock);
+        if (!g_outStarted)
+        {
+            g_outStarted = true;
+            std::thread(outputWorker).detach();
+        }
+        const auto level = [](float v) { return static_cast<uint8_t>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+        g_tap.left = level(left);
+        g_tap.right = level(right);
+        g_tap.ms = std::clamp(ms, 5, 200);
+        ++g_tap.serial;
+        g_outWake.notify_one();
     }
 
     void start(std::function<void(const std::wstring &)> send)

@@ -330,6 +330,7 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
             s_altEnter = true;
         else if (!enterDown)
             s_altEnter = false;
+        uint16_t keyboardDirections = 0u;
         for (const auto &[bit, keys] : s_bindings)
         {
             for (int key : keys)
@@ -339,8 +340,21 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
                 if (IsKeyDown(key))
                 {
                     clearBit(bit);
+                    keyboardDirections |= bit;
                     break;
                 }
+            }
+        }
+        // LOCAL PATCH (GitHub issue #11): the direction keys (WASD and the arrows by default) also push the left stick,
+        // which is what moves Hotsuma (the D-pad alone only works in menus). Diagonals are kept at full length.
+        {
+            const float kx = ((keyboardDirections & 0x0020u) ? 1.0f : 0.0f) - ((keyboardDirections & 0x0080u) ? 1.0f : 0.0f);
+            const float ky = ((keyboardDirections & 0x0040u) ? 1.0f : 0.0f) - ((keyboardDirections & 0x0010u) ? 1.0f : 0.0f);
+            if (kx != 0.0f || ky != 0.0f)
+            {
+                const float scale = (kx != 0.0f && ky != 0.0f) ? 0.7071f : 1.0f;
+                data[6] = static_cast<uint8_t>(std::clamp(128.0f + kx * scale * 127.0f, 0.0f, 255.0f));
+                data[7] = static_cast<uint8_t>(std::clamp(128.0f + ky * scale * 127.0f, 0.0f, 255.0f));
             }
         }
     }

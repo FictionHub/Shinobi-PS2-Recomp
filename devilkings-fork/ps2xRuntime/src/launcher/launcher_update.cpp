@@ -9,6 +9,10 @@
 // (launcher_webview.cpp unpackGameProgram). Nothing is sent to GitHub but the usual request.
 
 #include "launcher_update.h"
+#include "launcher_pack.h"
+
+#include <atomic>
+#include <mutex>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -182,6 +186,96 @@ namespace launcher::update
         fs::remove(root / "Shinobi Launcher.exe.old", ec);
     }
 
+    namespace
+    {
+        std::mutex g_oldCpuLock;
+        bool g_oldCpuBusy = false;
+        std::string g_oldCpuError;
+        std::atomic<int> g_oldCpuPercent{0};
+
+        std::string trimmed(std::string s)
+        {
+            s.erase(std::remove_if(s.begin(), s.end(), [](char c) { return c == '\r' || c == '\n' || c == ' '; }), s.end());
+            return s;
+        }
+    }
+
+    OldCpuBuild oldCpuBuild(const fs::path &root, int *percent, std::string *error)
+    {
+        const fs::path bin = root / "bin";
+        const std::string version = trimmed(readFile(root / "version.txt"));
+        std::error_code ec;
+        std::lock_guard<std::mutex> lock(g_oldCpuLock);
+        if (fs::exists(bin / "Shinobi-SSE4.exe", ec) && trimmed(readFile(bin / "Shinobi-SSE4.version")) == version)
+            return OldCpuBuild::Ready;
+        if (g_oldCpuBusy)
+        {
+            if (percent)
+                *percent = g_oldCpuPercent.load();
+            return OldCpuBuild::Downloading;
+        }
+        if (!g_oldCpuError.empty())
+        {
+            // reported once; the next ask tries again
+            if (error)
+                *error = g_oldCpuError;
+            g_oldCpuError.clear();
+            return OldCpuBuild::Failed;
+        }
+        g_oldCpuBusy = true;
+        g_oldCpuPercent = 0;
+        std::thread([root, bin, version]() {
+            std::string failure;
+            std::error_code ec2;
+            const fs::path pack = bin / "Shinobi-SSE4.pack";
+            if (!fs::exists(pack, ec2))
+            {
+                std::smatch m;
+                const std::string manifest = readFile(root / "recomplauncher.json");
+                if (version.empty() || !std::regex_search(manifest, m, std::regex("\"repo\"\\s*:\\s*\"([^\"]+)\"")))
+                    failure = "version.txt or recomplauncher.json is missing.";
+                else
+                {
+                    const std::string url = "https://github.com/" + m[1].str() + "/releases/download/v" + version +
+                                            "/Shinobi-SSE4-v" + version + ".pack";
+                    const fs::path part = bin / "Shinobi-SSE4.pack.part";
+                    std::fprintf(stderr, "[launcher] no AVX2: downloading %s\n", url.c_str());
+                    if (get(widen(url), nullptr, &part, [](int p) { g_oldCpuPercent = p; }))
+                        fs::rename(part, pack, ec2);
+                    else
+                    {
+                        fs::remove(part, ec2);
+                        failure = "The version of the game for your processor could not be downloaded. Check your internet "
+                                  "connection and press Play again, or download Shinobi-SSE4-v" + version +
+                                  ".pack from the GitHub release page and put it in the bin folder as Shinobi-SSE4.pack.";
+                    }
+                }
+            }
+            if (failure.empty())
+            {
+                const std::string unpacked = launcher::pack::unpack(pack, bin);
+                if (unpacked.empty())
+                {
+                    std::ofstream(bin / "Shinobi-SSE4.version", std::ios::trunc) << version << "\n";
+                    fs::remove(pack, ec2);
+                }
+                else
+                {
+                    fs::remove(pack, ec2); // damaged: fetched again next time
+                    failure = "The version of the game for your processor could not be unpacked: " + unpacked;
+                }
+            }
+            std::fprintf(stderr, "[launcher] game program for processors without AVX2: %s\n",
+                         failure.empty() ? "ready" : failure.c_str());
+            std::lock_guard<std::mutex> lock2(g_oldCpuLock);
+            g_oldCpuError = failure;
+            g_oldCpuBusy = false;
+        }).detach();
+        if (percent)
+            *percent = 0;
+        return OldCpuBuild::Downloading;
+    }
+
     void startCheck(const fs::path &root, std::function<void(const std::wstring &)> post)
     {
         std::thread([root, post]() {
@@ -203,6 +297,19 @@ namespace launcher::update
                 return;
             if (!newer(tag[1].str(), local))
                 return;
+            // LOCAL PATCH (GitHub issue #12): the release's zip must be newer too. The v0.5.3 release once carried the
+            // v0.5.0 zip by mistake, so every start offered an "update" that installed the same old version again.
+            {
+                std::smatch named;
+                const std::string url = asset[1].str();
+                if (std::regex_search(url, named, std::regex("v?(\\d+\\.\\d+\\.\\d+)-Windows-x64\\.zip$")) &&
+                    !newer(named[1].str(), local))
+                {
+                    std::fprintf(stderr, "[update] %s's download is version %s, not newer than %s: not offered\n",
+                                 tag[1].str().c_str(), named[1].str().c_str(), local.c_str());
+                    return;
+                }
+            }
             std::fprintf(stderr, "[update] %s available (this is %s)\n", tag[1].str().c_str(), local.c_str());
             post(widen("update:" + tag[1].str() + "|" + asset[1].str()));
         }).detach();

@@ -414,6 +414,8 @@ add_library(ps2_runtime STATIC
     src/lib/ps2_unlocks.cpp
     src/lib/ps2_fair_boss.cpp
     src/lib/ps2_pacing.cpp
+    src/lib/ps2_jukebox.cpp
+    src/lib/ps2_lang_overlay.cpp
     src/lib/ps2_scarf_collide.cpp
     src/lib/ps2_framegen.cpp
     src/lib/ps2_cri_rna.cpp
@@ -774,6 +776,7 @@ if(WIN32 AND NOT PS2X_IS_VITA)
         src/launcher/launcher_settings_map.cpp
         src/launcher/launcher_ini.cpp
         src/launcher/launcher_dualsense.cpp
+        src/launcher/launcher_pads.cpp # LOCAL PATCH: the kind of controller connected
         src/launcher/launcher_update.cpp
         src/launcher/launcher_pack.cpp # LOCAL PATCH: bin/Shinobi.pack (LZMA SDK below, public domain)
         src/launcher/lzma/LzmaDec.c

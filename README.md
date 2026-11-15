@@ -2,7 +2,7 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
-**v0.5.4:** picture centred (no more black bar at the bottom), steadier frame pacing at high frame rates, a game volume setting, the streamed-audio fix on by default (true stereo music, thanks to LgSetzeR's write-up in issue #2), and shaders built once instead of on every start.
+**v0.6.0:** a Jukebox (launcher > Jukebox: replace any of the game's 30 music tracks with your own mp3, ogg or wav, kept through updates), WASD movement and Shift / Ctrl bindings on the keyboard, IMAX mode now covers the story cutscenes too (the movie fills a 16:9 screen at its real shape instead of being squashed between bars), picture centred (no more black bar at the bottom), steadier frame pacing at high frame rates, a game volume setting, your own launcher music (FPS tab > Launcher Music, kept through updates), the streamed-audio fix on by default (true stereo music, thanks to LgSetzeR's write-up in issue #2), shaders built once instead of on every start, and game folders with any characters in their name (e.g. C:\Users\José) now work.
 
 **v0.5.3:** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
 
@@ -333,7 +333,7 @@ Any issues? Tell me in the Issues tab or on Reddit, I read everything and I'll f
 ## What you need
 
 - Windows 10 or 11, 64-bit
-- Any 64-bit processor with SSE4.1 (Intel Core 2 from 2008, AMD from 2011, or newer: the same minimum as PCSX2). With AVX2 (Intel Core 4th generation, 2013+, or any AMD Ryzen) the launcher starts the faster build; without it, it starts the fallback build by itself. No choice to make.
+- Any 64-bit processor with SSE4.1 (Intel Core 2 from 2008, AMD from 2011, or newer: the same minimum as PCSX2). With AVX2 (Intel Core 4th generation, 2013+, or any AMD Ryzen) the launcher starts the faster build; without it, the launcher fetches the fallback build once (about 19 MB, from the same release: `Shinobi-SSE4-v<version>.pack`) and starts it by itself. No choice to make. Offline, download that file from the release page and put it in the `bin` folder as `Shinobi-SSE4.pack`.
 - A graphics card with Direct3D 11 (default) or Vulkan
 - Microsoft Edge WebView2 Runtime (part of Windows 11; without it the launcher still sets up and starts the game, just without its window)
 - The Microsoft Visual C++ Redistributable (x64), which most PCs already have

@@ -1,6 +1,10 @@
 #include <algorithm>
 #include <cctype>
 
+// LOCAL PATCH: Languages (ps2_lang_overlay.cpp): ROFSSMP.CVM served with the chosen language's files.
+bool ps2xLangOverlayInit(const std::filesystem::path &usCvm, uint64_t &virtualBytes);
+bool ps2xLangOverlayRead(uint64_t sector, uint64_t sectors, uint8_t *dst, size_t bytes);
+
 namespace
 {
     constexpr uint32_t kCdSectorSize = 2048;
@@ -12,6 +16,7 @@ namespace
         uint32_t sizeBytes = 0;
         uint32_t baseLbn = 0;
         uint32_t sectors = 0;
+        bool langOverlay = false; // LOCAL PATCH: read through ps2xLangOverlayRead
     };
 
     std::unordered_map<std::string, CdFileEntry> g_cdFilesByKey;
@@ -379,7 +384,7 @@ namespace
             }
         }
 
-        const uint64_t sizeBytes = std::filesystem::file_size(path, ec);
+        uint64_t sizeBytes = std::filesystem::file_size(path, ec);
         if (ec)
         {
             g_lastCdError = -1;
@@ -387,6 +392,17 @@ namespace
         }
 
         CdFileEntry entry;
+        // LOCAL PATCH (Languages): the game's archive with the chosen language's files in it (bigger than on disk).
+        {
+            std::string leaf = path.filename().string();
+            std::transform(leaf.begin(), leaf.end(), leaf.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            uint64_t virtualBytes = 0;
+            if (leaf == "rofssmp.cvm" && ps2xLangOverlayInit(path, virtualBytes))
+            {
+                sizeBytes = virtualBytes;
+                entry.langOverlay = true;
+            }
+        }
         entry.hostPath = path;
         entry.sizeBytes = static_cast<uint32_t>(std::min<uint64_t>(sizeBytes, 0xFFFFFFFFu));
         entry.baseLbn = g_nextPseudoLbn;
@@ -443,6 +459,12 @@ namespace
             }
 
             const uint64_t relativeLbn = static_cast<uint64_t>(lbn - entry.baseLbn);
+            if (entry.langOverlay) // LOCAL PATCH (Languages)
+            {
+                const bool ok = ps2xLangOverlayRead(relativeLbn, sectors, dst, byteCount);
+                g_lastCdError = ok ? 0 : -1;
+                return ok;
+            }
             const uint64_t offset = relativeLbn * kCdSectorSize;
             return readHostRange(entry.hostPath, offset, dst, byteCount);
         }

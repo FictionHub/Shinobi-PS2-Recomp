@@ -654,6 +654,19 @@ namespace ps2x::settings
                  "Where the saves of slot 1 are kept (slot 2 uses the sibling folder mc1). Relative to the game folder: "
                  "../saves/mc0 is the saves folder next to the launcher.", Kind::Path,
                  "../saves/mc0", nullptr, {}, {}, 0, 0, nullptr, false});
+            // LOCAL PATCH: Languages (ps2_lang_overlay.cpp). Japanese comes from the US disc itself; French, German,
+            // Italian and Spanish from the player's European disc image (eu_disc). Applies when the game starts.
+            add({"language", "voice", "Voice language",
+                 "Voices, cutscene dubs and story movie audio. French / German / Italian / Spanish need the European disc.",
+                 Kind::Choice, "en", nullptr, {"en", "ja", "fr", "de", "it", "es"},
+                 {"English", "Japanese", "French", "German", "Italian", "Spanish"}, 0, 0, nullptr, false});
+            add({"language", "text", "Text language",
+                 "Subtitles, messages and menus. French / German / Italian / Spanish need the European disc.",
+                 Kind::Choice, "en", nullptr, {"en", "ja", "fr", "de", "it", "es"},
+                 {"English", "Japanese", "French", "German", "Italian", "Spanish"}, 0, 0, nullptr, false});
+            add({"language", "eu_disc", "European disc image",
+                 "Your Shinobi (Europe) disc image (SCES_514.28): its languages are read from it, nothing is copied.",
+                 Kind::Path, "", nullptr, {}, {}, 0, 0, nullptr, false});
             // Jogo (ganchos que o override do jogo implementa)
             add({"game", "skip_intro", "Skip start-up logos",
                  "SEGA, Overworks and ADX logos pass in about a second each (a button press during them does the same).",

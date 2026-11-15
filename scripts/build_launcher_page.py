@@ -330,6 +330,12 @@ template = must_replace(template, '<sc-for list="{{modRows}}" as="m" hint-placeh
                         '<input type="color" style="width:30px;height:24px;padding:0;border:1px solid #888;border-radius:4px;background:none;cursor:pointer" value="{{scarfHex}}" title="Any colour" aria-label="Pick any scarf colour" '
                         'sc-camel-on-change="{{scarfPick}}">'
                         '</div></div>'
+                        # LOCAL PATCH: haptic strength (settings [input] haptic_strength), live in the game
+                        '<div class="mrow scarfrow"><div><b>Haptic strength</b><span>How strong the DualSense haptics feel: {{hapStrName}}.</span></div>'
+                        '<div class="segs" style="flex:0 0 auto" role="group" aria-label="Haptic strength">'
+                        '<sc-for list="{{hapChips}}" as="h" hint-placeholder-count="4">'
+                        '<button class="seg {{h.cls}}" aria-pressed="{{h.on}}" sc-camel-on-click="{{h.pick}}">{{h.name}}</button>'
+                        '</sc-for></div></div>'
                         '<sc-for list="{{modRows}}" as="m" hint-placeholder-count="4">')
 
 
@@ -338,8 +344,12 @@ CHK = ('<span class="bx"><svg width="12" height="10" sc-camel-view-box="0 0 12 1
        'fill="none" stroke="#fff" stroke-width="2.2"></path></svg></span>')
 template = must_replace(template, '<h2>Graphical Settings</h2>',
     '<h2>Settings</h2>\n'
-    '        <div class="segs tabs" role="tablist" aria-label="Settings pages"><sc-for list="{{tabOpts}}" as="t" hint-placeholder-count="3">'
-    '<button class="seg {{t.cls}}" role="tab" aria-selected="{{t.on}}" sc-camel-on-click="{{t.pick}}">{{t.name}}</button></sc-for></div>\n'
+    # One page name at a time; L1 / R1 (LB / RB, Q / E) or the arrows switch pages, the dots jump to one.
+    '        <div class="tabs tabnav" role="tablist" aria-label="Settings pages">'
+    '<button class="tnav" aria-label="Previous settings page" sc-camel-on-click="{{tabPrev}}"><b class="kh">{{tabHintL}}</b><span class="ar">&#8249;</span></button>'
+    '<div class="tcur"><div class="tname">{{tabName}}</div><div class="tdots"><sc-for list="{{tabOpts}}" as="t" hint-placeholder-count="6">'
+    '<button class="tdot {{t.cls}}" role="tab" aria-label="{{t.name}}" title="{{t.name}}" aria-selected="{{t.on}}" sc-camel-on-click="{{t.pick}}"></button></sc-for></div></div>'
+    '<button class="tnav" aria-label="Next settings page" sc-camel-on-click="{{tabNext}}"><span class="ar">&#8250;</span><b class="kh">{{tabHintR}}</b></button></div>\n'
     '        <sc-if value="{{tabDisplay}}" hint-placeholder-val="{{true}}">')
 _m = re.search(r'\n(\s*)<div( class="inl")?>\s*<div class="fl">Renderer</div>', template)
 assert _m, 'renderer anchor'
@@ -458,7 +468,317 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
     _segrow('Frame Generation Target', 'fgtOpts', 6, 'Pictures a second with frame generation. Auto = just under your screen&#39;s refresh.') +
     _chkrow('Low Latency (F6)', 'lowlat', 'toggleLowlat', 'Stops the graphics driver queueing frames: 16-33 ms less delay, like NVIDIA Reflex.') +
     _chkrow('Performance Overlay (F2)', 'ovl', 'toggleOvl', 'FPS, frame time, 1% lows, CPU, GPU, RAM and VRAM in the top-left corner.') +
-    _segrow('Game Volume', 'volOpts', 6, 'Music, voices and effects together.') +
+    '        </sc-if>\n        <sc-if value="{{tabController}}"')
+
+# Six settings tabs: smaller tab labels so they all fit; the Jukebox's own compact rows (name + file, two small buttons).
+template = must_replace(template, '@media (prefers-reduced-motion:reduce)',
+    # The boot screen (see the constructor): gold retro LOADING bar over black with faint scanlines; the page's own
+    # animations wait, paused, until it goes.
+    'html.booting .stage *,html.booting .stage{animation-play-state:paused!important}'
+    '.boot{position:fixed;inset:0;z-index:100000;background:radial-gradient(ellipse at 50% 45%,#141006 0%,#050505 62%,#000 100%);'
+    'display:grid;place-items:center;transition:opacity .45s ease,filter .45s ease}'
+    '.boot::after{content:"";position:absolute;inset:0;pointer-events:none;'
+    'background:repeating-linear-gradient(180deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px);mix-blend-mode:screen}'
+    '.boot.boot-out{opacity:0;filter:blur(6px) brightness(1.4)}'
+    '.boot-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;animation:bootVid .6s ease-out .05s forwards;'
+    'filter:saturate(1.15) contrast(1.08)}'
+    '@keyframes bootVid{to{opacity:.62}}'
+    '.boot-shade{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 48%,rgba(0,0,0,.25) 0%,rgba(0,0,0,.55) 55%,rgba(0,0,0,.9) 100%)}'
+    # 1985 digital-dashboard look (Nissan 300ZX style): phosphor-green bar graph like a tachometer, small boxed
+    # readouts; small and low on the screen, the lightning behind it.
+    '.boot{place-items:end start!important;padding:0 0 5.5vh 4vw;box-sizing:border-box}'
+    '.boot-in{position:relative;z-index:1;width:min(19vw,240px);padding:0;'
+    'animation:bootIn .35s ease-out both;'
+    'font-family:Consolas,"Lucida Console",monospace;color:#5dff9a}'
+    '@keyframes bootIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}'
+    '.boot-top{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px}'
+    '.boot-word{font-size:10.5px;letter-spacing:.3em;text-shadow:0 0 6px rgba(60,255,130,.8)}'
+    '.boot-dots b{display:inline-block;font-style:normal;font-weight:400;animation:bootDot 1s steps(1) infinite}'
+    '.boot-dots b:nth-child(2){animation-delay:.2s}.boot-dots b:nth-child(3){animation-delay:.4s}'
+    '@keyframes bootDot{0%{opacity:1}50%{opacity:.15}}'
+    '.boot-pct{text-align:right;font-size:12px;letter-spacing:.08em;'
+    'text-shadow:0 0 8px rgba(60,255,130,.9);font-variant-numeric:tabular-nums}'
+    '.boot-graph{display:flex;align-items:flex-end;gap:2px;height:22px}'
+    '.boot-graph i{flex:1;border-radius:1px;background:rgba(60,255,130,.10);box-shadow:inset 0 0 0 1px rgba(60,255,130,.12);'
+    'transition:background .08s,box-shadow .08s}'
+    '.boot-graph i.on{background:linear-gradient(180deg,#9dffc0,#2fe07a);box-shadow:0 0 7px rgba(60,255,130,.75)}'
+    '.boot-graph i.on.hot{background:linear-gradient(180deg,#eaffb0,#b8f03a);box-shadow:0 0 8px rgba(190,255,80,.8)}'
+    '.boot-scale{display:flex;justify-content:space-between;margin-top:4px;padding-top:3px;border-top:1px solid rgba(70,255,140,.3);'
+    'font-size:8.5px;letter-spacing:.06em;color:rgba(93,255,154,.55)}'
+    '.boot-sub{margin-top:6px;text-align:left;font-size:8.5px;letter-spacing:.34em;color:rgba(93,255,154,.4)}'
+    # The credits under the readout, one after the other.
+    '.boot-credits{margin-top:10px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;font-size:9.5px;letter-spacing:.2em;white-space:nowrap;'
+    'color:rgba(93,255,154,.75);text-shadow:0 0 6px rgba(60,255,130,.55)}'
+    '.boot-credits span{opacity:0;transform:translateY(3px);animation:bootLine .3s ease-out forwards}'
+    '.boot-credits span:nth-child(1){animation-delay:.25s}.boot-credits span:nth-child(2){animation-delay:.5s}'
+    '.boot-credits span:nth-child(3){animation-delay:.75s}'
+    '.boot-credits .boot-tra{font-size:13px;letter-spacing:.38em;font-weight:700;color:#5dff9a;text-shadow:0 0 9px rgba(60,255,130,.85)}'
+    '@keyframes bootLine{to{opacity:1;transform:none}}'
+    # A fiercer intro (after the loading screen, on the bass drop): quicker overall, the art slamming in on a white
+    # lightning flash with a short shake, the logo crashing in from big with a recoil, the side columns whipping in
+    # with a skew and motion blur. (Same names as the design's: these later definitions take over.)
+    ':root{--t:.9}'
+    '@keyframes ivHero{0%{opacity:0;filter:brightness(2.6) contrast(1.2) blur(14px)}'
+    '18%{opacity:1;filter:brightness(1.9) blur(4px)}45%{filter:brightness(1.15) blur(0)}100%{opacity:1;filter:none}}'
+    '@keyframes ivArt{0%{scale:1.28}55%{scale:.985}100%{scale:1}}'
+    '@keyframes ivShake{0%,100%{translate:0 0}15%{translate:-7px 3px}30%{translate:6px -4px}45%{translate:-4px 2px}'
+    '60%{translate:3px -2px}75%{translate:-2px 1px}}'
+    '.hero{animation:ivHero calc(1.2s*var(--t)) cubic-bezier(.12,.9,.2,1) backwards,ivShake .38s linear calc(.12s*var(--t)) backwards!important}'
+    '@keyframes ivLogo{0%{opacity:0;scale:1.9;translate:0 0;filter:blur(14px) drop-shadow(0 4px 10px rgba(40,0,30,.45))}'
+    '45%{opacity:1;scale:.93;filter:blur(0) drop-shadow(0 4px 10px rgba(40,0,30,.45))}'
+    '68%{scale:1.04}84%{scale:.99}100%{opacity:1;scale:1;translate:0 0;filter:drop-shadow(0 4px 10px rgba(40,0,30,.45))}}'
+    '@keyframes ivLeft{0%{opacity:0;translate:-70px 0;transform:skewX(-10deg);filter:blur(7px)}'
+    '60%{opacity:1;translate:7px 0;transform:skewX(2deg);filter:blur(0)}100%{opacity:1;translate:0 0;transform:none;filter:none}}'
+    '@keyframes ivRight{0%{opacity:0;translate:70px 0;transform:skewX(10deg);filter:blur(7px)}'
+    '60%{opacity:1;translate:-7px 0;transform:skewX(-2deg);filter:blur(0)}100%{opacity:1;translate:0 0;transform:none;filter:none}}'
+    '@keyframes ivPop{0%{opacity:0;scale:.82;filter:blur(6px)}55%{opacity:1;scale:1.035;filter:blur(0)}100%{opacity:1;scale:1;filter:none}}'
+    '@keyframes ivDown{0%{opacity:0;translate:0 -100%}65%{opacity:1;translate:0 5px}100%{opacity:1;translate:0 0}}'
+    '@keyframes ivFade{0%{opacity:0;filter:brightness(1.8)}100%{opacity:1;filter:none}}'
+    # The Refresh button under the TRA logo.
+    '.refbtn{display:flex;align-items:center;justify-content:center;gap:5px;margin:6px 0 0 auto;padding:2px 9px 2px 7px;'
+    'font-family:Rajdhani,sans-serif;font-weight:700;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#bdbdc4;'
+    'background:transparent;border:1px solid #3a3a40;border-radius:3px;cursor:pointer;transition:color .15s,border-color .15s}'
+    '.refbtn span{font-size:14px;line-height:1;transition:transform .45s cubic-bezier(.2,.8,.3,1)}'
+    '.refbtn:hover{color:#fff;border-color:#8a8a92}.refbtn:hover span{transform:rotate(180deg)}'
+    'html.ingame .refbtn{display:none}'
+    '.markcol{display:flex;flex-direction:column;gap:3px;min-width:0}.markcol .studio{white-space:nowrap}'
+    '.foot{align-items:flex-end!important}'
+    # A narrower left column, a wider settings column (the art keeps the middle).
+    '.body{grid-template-columns:260px minmax(0,1fr) 360px!important}'
+    '.left .btn{padding-left:10px!important;padding-right:10px!important;letter-spacing:.04em!important;min-width:0!important}'
+    '.left{gap:6px!important}.left .card p{font-size:11.5px!important;line-height:1.28!important}.left .card{padding:8px 11px 9px!important}'
+    '.tabnav{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;border:1px solid #2c2c31;border-radius:4px;'
+    'background:linear-gradient(180deg,#151518,#0b0b0d);padding:5px 6px;overflow:hidden}'
+    '.tnav{display:flex;align-items:center;gap:4px;height:34px;padding:0 7px;border:1px solid #3a3a40;border-radius:3px;'
+    'background:linear-gradient(180deg,#1f1f23,#121214);color:#eee;cursor:pointer;font-family:Rajdhani,sans-serif;font-weight:700}'
+    '.tnav:hover{border-color:#8a8a92}.tnav .ar{font-size:24px;line-height:1;margin-top:-3px}'
+    '.tnav .kh{font-size:11.5px;letter-spacing:.04em;padding:1px 5px;border:1px solid #55555c;border-radius:3px;color:#cfcfd4}'
+    '.tcur{text-align:center;min-width:0}'
+    '.tname{font-family:Rajdhani,sans-serif;font-weight:700;font-size:18px;letter-spacing:.05em;text-transform:uppercase;color:#fff;'
+    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;will-change:transform,filter,opacity}'
+    '.tdots{display:flex;justify-content:center;gap:6px;margin-top:3px}'
+    '.tdot{width:7px;height:7px;padding:0;border-radius:50%;border:0;background:#4a4a50;cursor:pointer;transition:background .2s,transform .2s}'
+    '.tdot.on{background:#fff;transform:scale(1.25)}.tdot:hover{background:#9a9aa2}'
+    '.jlist{max-height:236px;overflow-y:auto;overflow-x:hidden;padding-right:6px}'
+    '.jrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid #26262b}'
+    '.jfoot{border-bottom:0;margin-top:6px}'
+    '.jname{min-width:0;line-height:1.2}'
+    '.jname b{display:block;font-size:13px;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    '.jname small{display:block;font-size:11.5px;color:#8a8a92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    '.jrow .btn{min-width:0;height:28px;padding:0 10px;font-size:12px;letter-spacing:.04em}'
+    '.jrow .btn:hover{translate:0 0}'
+    '@media (prefers-reduced-motion:reduce)')
+
+# ---- LOCAL PATCH: the Languages page (ps2_lang_overlay.cpp in the game): voices and text in English or Japanese from the
+# US disc, or French / German / Italian / Spanish from the player's European disc image. ----
+template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
+    '        </sc-if>\n'
+    '        <sc-if value="{{tabLanguages}}" hint-placeholder-val="{{false}}">\n'
+    '          <div class="jrow jfoot" style="margin:0 0 6px"><div class="jname" title="{{euDiscPath}}"><b>European disc</b>'
+    '<small style="{{euDiscStyle}}">{{euDiscText}}</small></div>'
+    '<button class="btn" sc-camel-on-click="{{euPick}}"><span class="lab">Choose</span></button>'
+    '<button class="btn" sc-camel-on-click="{{euClear}}"><span class="lab">Remove</span></button></div>\n' +
+    _segrow('Voices', 'langVoiceOpts', 6, 'Voices, cutscene dubs and story movie audio.') +
+    _segrow('Text and subtitles', 'langTextOpts', 6, 'Subtitles, messages and menus.') +
+    '          <p class="note" style="margin:6px 0 0;font-size:11.5px">Japanese is on your US disc. French, German, Italian and '
+    'Spanish come from your own Shinobi (Europe) disc image: nothing is copied. Changes apply the next time the game starts; '
+    'subtitles are switched on or off in the game&#39;s own Options menu.</p>\n'
+    '        </sc-if>\n        <sc-if value="{{tabController}}"')
+
+# ---- LOCAL PATCH: the Feature Set page: everything the recomp does now, and what is planned. Edit the lists here. ----
+FEATURES_NOW = [
+    ('Graphics', [
+        ('Up to 4K and 8K resolution (D3D11 or Vulkan)', ''),
+        ('Widescreen: 16:9, 21:9, 32:9 and Auto', ''),
+        ('IMAX mode: no bars, even in movies', 'F7'),
+        ('HD texture packs, switched live', 'Shift+F5'),
+        ('HD Texture Pack v1: free separate download', ''),
+        ('FXAA, Edge AA, sharpening, anisotropic filtering', ''),
+        ('Screen filters: Sharp, Smooth, Scanlines, CRT', ''),
+        ('Dithering, mipmapping and upscaling fixes', ''),
+        ('Picture centred, no black strip', ''),
+    ]),
+    ('Performance', [
+        ('Runs natively as PC code, not emulated', ''),
+        ('Frame generation up to 360 FPS', 'F4'),
+        ('Low latency mode', 'F6'),
+        ('Performance overlay (FPS, CPU, GPU)', 'F2'),
+        ('Steady frame pacing at high frame rates', ''),
+        ('Shaders cached for fast starts', ''),
+        ('Runs on older CPUs without AVX2', ''),
+    ]),
+    ('Sound', [
+        ('Streamed music and movies in true stereo', ''),
+        ('Game volume', ''),
+        ('Jukebox: your music for all 30 tracks', ''),
+        ('Your own launcher music', ''),
+    ]),
+    ('Languages', [
+        ('Japanese voices and text, from your US disc', ''),
+        ('French, German, Italian, Spanish (EU disc)', ''),
+        ('Dubbed movies and subtitles', ''),
+    ]),
+    ('Controls', [
+        ('DualSense HD haptics over USB or Bluetooth', ''),
+        ('L2 adaptive trigger for ninja magic', ''),
+        ('Haptics switch and strength in the Mod Menu', ''),
+        ('Menu haptics: taps and scrolling beads', ''),
+        ('Full controller and keyboard remapping', ''),
+        ('WASD movement and 1:1 mouse aiming', 'F10'),
+        ('Camera invert and stick dead zone', ''),
+        ('PlayStation, Xbox and Nintendo pads detected', ''),
+    ]),
+    ('Mods', [
+        ('Fair final boss', 'F9'),
+        ('Infinite health', 'F8'),
+        ('Uncursed Sword: no sword hunger', 'Shift+F7'),
+        ('Unlock everything', 'Shift+F6'),
+        ('Close-up camera', 'F3'),
+        ('Hide the HUD', 'F5'),
+        ('Scarf colours, remove scarf, scarf collision', ''),
+        ('Skip the start-up logos', ''),
+    ]),
+    ('Launcher', [
+        ('Sets the game up from your own disc image', ''),
+        ('Automatic updates', ''),
+        ('In-game menu with every setting live', 'F1'),
+        ('Saves kept safe, with automatic backups', ''),
+        ('Game manual viewer', ''),
+        ('Full controller navigation', ''),
+        ('Rebuilt launcher: boot screen, theme, pages', ''),
+        ('Works on Linux through Proton', ''),
+    ]),
+]
+# LOCAL PATCH: new in this version: these rows get gold sparks and a NEW tag on the Feature Set page.
+FEATURES_NEW = {
+    'IMAX mode: no bars, even in movies',
+    'Picture centred, no black strip',
+    'Steady frame pacing at high frame rates',
+    'Shaders cached for fast starts',
+    'Streamed music and movies in true stereo',
+    'Game volume',
+    'Jukebox: your music for all 30 tracks',
+    'Your own launcher music',
+    'Japanese voices and text, from your US disc',
+    'French, German, Italian, Spanish (EU disc)',
+    'Dubbed movies and subtitles',
+    'Haptics switch and strength in the Mod Menu',
+    'Menu haptics: taps and scrolling beads',
+    'WASD movement and 1:1 mouse aiming',
+    'PlayStation, Xbox and Nintendo pads detected',
+    'Rebuilt launcher: boot screen, theme, pages',
+    'HD Texture Pack v1: free separate download',
+}
+FEATURES_SOON = [
+    'IMAX for in-game (non-movie) cutscenes',
+    'Save states',
+    '4K on Vulkan fixes (intro, pause menu)',
+    '21:9 effect fixes (smoke, blood, kanji)',
+    'More HD textures with every update',
+    'Easy Setup in RecompLauncher',
+]
+
+
+def _features_html():
+    import html as _h
+    import random
+    out = ['          <div class="fver"><span>Installed version</span><b>{{versionText}}</b></div>\n',
+           '          <div class="flist" tabindex="0" aria-label="Feature set (scroll with the right stick)">\n',
+           '            <div class="fhead"><span>Available now</span></div>\n']
+    nnew = 0
+    for group, rows in FEATURES_NOW:
+        out.append('            <div class="fgroup">%s</div>\n' % _h.escape(group))
+        for text, key in rows:
+            kbd = ('<kbd>%s</kbd>' % _h.escape(key)) if key else ''
+            if text in FEATURES_NEW:
+                # a few gold sparks drifting up out of the letters, here and there (fixed random spots and
+                # timings per row, so the page is the same every build)
+                rnd = random.Random(nnew * 7919 + 17)
+                nnew += 1
+                sparks = ''.join(
+                    '<b style="left:%d%%;top:%d%%;--dx:%dpx;--dy:-%dpx;animation-duration:%.1fs;animation-delay:-%.1fs"></b>'
+                    % (rnd.randint(4, 96), rnd.randint(25, 75), rnd.randint(-7, 7), rnd.randint(14, 24),
+                       rnd.uniform(4.5, 7.5), rnd.uniform(0, 7.5)) for _ in range(2))
+                out.append('            <div class="frow fnew"><i></i><span><span class="ftx">%s%s</span></span>%s'
+                           '<em class="new">NEW</em></div>\n' % (_h.escape(text), sparks, kbd))
+            else:
+                out.append('            <div class="frow"><i></i><span>%s</span>%s</div>\n' % (_h.escape(text), kbd))
+    assert nnew == len(FEATURES_NEW), 'a FEATURES_NEW row is not in FEATURES_NOW'
+    out.append('            <div class="fhead soon"><span>Coming in future updates</span></div>\n')
+    for text in FEATURES_SOON:
+        out.append('            <div class="frow fsoon"><i></i><span>%s</span><em>SOON</em></div>\n' % _h.escape(text))
+    out.append('          </div>\n')
+    return ''.join(out)
+
+
+template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
+    '        </sc-if>\n'
+    '        <sc-if value="{{tabFeatures}}" hint-placeholder-val="{{false}}">\n' + _features_html() +
+    '        </sc-if>\n        <sc-if value="{{tabController}}"')
+template = must_replace(template, '@media (prefers-reduced-motion:reduce)',
+    '.fver{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;padding:7px 12px;border:1px solid rgba(255,201,53,.35);'
+    'border-radius:4px;background:linear-gradient(90deg,rgba(255,201,53,.10),rgba(255,201,53,.02))}'
+    '.fver span{font-family:Rajdhani,sans-serif;font-weight:700;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a9a9b0}'
+    '.fver b{font-family:Rajdhani,sans-serif;font-weight:700;font-size:17px;letter-spacing:.08em;color:#ffc935;text-shadow:0 0 8px rgba(255,190,40,.35)}'
+    '.segs .seg.locked{opacity:.35}'
+    '.flist{max-height:330px;overflow-y:auto;overflow-x:hidden;padding:0 10px 12px 2px;outline:none;scrollbar-width:thin;'
+    'scrollbar-color:#3a3a40 transparent;-webkit-mask:linear-gradient(180deg,#000 0,#000 calc(100% - 22px),transparent 100%)}'
+    # selected with the controller: no box over the text, just a thin gold bar down its left edge (beats the general
+    # 'html body .pad-focus.pad-focus.pad-focus' selection box)
+    'html body .flist.pad-focus.pad-focus.pad-focus.pad-focus{outline:none!important;box-shadow:inset 2px 0 0 rgba(255,201,53,.75)!important;z-index:auto!important}'
+    '.fhead{display:flex;align-items:center;gap:10px;font-family:Rajdhani,sans-serif;font-weight:700;font-size:15px;letter-spacing:.18em;'
+    'text-transform:uppercase;color:#ffc935;text-shadow:0 0 8px rgba(255,190,40,.35);margin:4px 0 2px}'
+    '.fhead::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(255,201,53,.45),transparent)}'
+    '.fhead.soon{margin-top:18px}'
+    '.fgroup{font-family:Rajdhani,sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#7d7d86;margin:12px 0 4px}'
+    '.frow{display:flex;align-items:center;gap:9px;padding:4px 0;font-size:12.5px;line-height:1.3;color:#e6e6ea;border-bottom:1px solid #1c1c20}'
+    '.frow i{flex:none;width:5px;height:5px;border-radius:50%;background:#ffc935;box-shadow:0 0 5px rgba(255,201,53,.6)}'
+    '.frow span{flex:1;min-width:0}'
+    '.frow kbd{flex:none;font-family:Rajdhani,sans-serif;font-weight:700;font-size:11px;letter-spacing:.03em;padding:1px 6px;'
+    'border:1px solid #4a4a52;border-radius:3px;color:#d4d4da;background:#141417;white-space:nowrap}'
+    '.frow.fnew>span{white-space:nowrap;overflow:visible}'
+    '.frow.fnew .ftx{position:relative;color:#fff3d0}'
+    '.frow.fnew .ftx b{position:absolute;width:2px;height:2px;border-radius:50%;background:#ffe9a0;pointer-events:none;'
+    'box-shadow:0 0 4px 1px rgba(255,201,53,.85);opacity:0;animation:fspark 6s ease-out infinite}'
+    '@keyframes fspark{0%{transform:translate(0,0) scale(1);opacity:0}5%{opacity:.95}'
+    '38%{transform:translate(var(--dx),var(--dy)) scale(.25);opacity:0}100%{transform:translate(var(--dx),var(--dy));opacity:0}}'
+    '.frow em.new{font-size:9px;letter-spacing:.1em;padding:0 5px;color:#141417;'
+    'background:linear-gradient(90deg,#ffc935,#ffe08a,#ffc935);background-size:200% 100%;border-color:#ffc935;'
+    'animation:fshine 3s linear infinite}'
+    '@keyframes fshine{0%{background-position:100% 0}100%{background-position:-100% 0}}'
+    '.frow.fsoon{color:#9a9aa2}.frow.fsoon i{background:#55555c;box-shadow:none}'
+    '.frow em{flex:none;font-style:normal;font-family:Rajdhani,sans-serif;font-weight:700;font-size:10px;letter-spacing:.14em;'
+    'padding:1px 6px;border-radius:3px;color:#ffc935;border:1px solid rgba(255,201,53,.5)}'
+    '@media (prefers-reduced-motion:reduce)')
+
+# ---- LOCAL PATCH: the Jukebox tab (ps2_jukebox.cpp in the game): any of the game's music tracks replaced by a file
+# of the player's own, copied into jukebox/ (kept through updates). ----
+template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tabController}}"',
+    '        </sc-if>\n'
+    '        <sc-if value="{{tabJukebox}}" hint-placeholder-val="{{false}}">\n' +
+    # Sound page: the game's volume and the launcher's music first, then the Jukebox.
+    # LOCAL PATCH: Game Volume as a slider (0..100 in steps of 5; left / right on a controller)
+    '        <div>\n'
+    '          <div class="fl" title="Music, voices and effects together."><span>Game Volume</span><em>{{volName}}</em></div>\n'
+    '          <div class="rng"><div class="trk" style="background: {{volBg}}"></div><input type="range" min="0" max="100" step="5" '
+    'value="{{volNum}}" sc-camel-on-change="{{setVol}}" aria-label="Game volume"></div>\n'
+    '        </div>\n' +
+    '        <div class="jrow jfoot" style="margin:2px 0 4px"><div class="jname" title="Any mp3, ogg, m4a, wav, flac or opus file of yours. Kept through updates.">'
+    '<b>Launcher Music</b><small>{{musicName}}</small></div>'
+    '<button class="btn" sc-camel-on-click="{{pickMusic}}"><span class="lab">Choose</span></button>'
+    '<button class="btn" sc-camel-on-click="{{defaultMusic}}"><span class="lab">Default</span></button></div>\n'
+    '          <div class="fl" style="margin-top:4px">Jukebox</div>\n'
+    '          <p class="note" style="margin:0 0 4px;font-size:11.5px">Your own mp3, ogg or wav for any track. '
+    'Loops, and follows the game&#39;s volume and fades.</p>\n'
+    '          <div class="jlist">\n'
+    '            <sc-for list="{{jukeRows}}" as="j" hint-placeholder-count="6">\n'
+    '              <div class="jrow"><div class="jname" title="{{j.code}}"><b>{{j.label}}</b><small style="{{j.style}}">{{j.file}}</small></div>'
+    '<button class="btn" sc-camel-on-click="{{j.pick}}"><span class="lab">Choose</span></button>'
+    '<button class="btn" sc-camel-on-click="{{j.reset}}"><span class="lab">Default</span></button></div>\n'
+    '            </sc-for>\n'
+    '          </div>\n'
+    '          <div class="jrow jfoot"><div class="jname"><small>Or put files in the jukebox folder, named after the track (e.g. BGM01_00_00T.mp3).</small></div>'
+    '<button class="btn" sc-camel-on-click="{{jukeFolder}}"><span class="lab">Open folder</span></button></div>\n'
     '        </sc-if>\n        <sc-if value="{{tabController}}"')
 
 # ---- LOCAL PATCH: invert camera switches in Configure Controller (Gamepad view) ----
@@ -482,10 +802,17 @@ template = must_replace(template,
                         '        <div style="display:flex;align-items:center;gap:14px">')
 template = must_replace(template,
                         '<span class="tra-b">TR<i>A</i></span></div>\n      </div>\n    </div>',
-                        '<span class="tra-b">TR<i>A</i></span></div>\n      </div>\n'
-                        '      <p class="studio">Developed by <b>Twilight Orchard</b></p>\n'
-                        '      <p class="studio">Created by <b>TheRealAfsan</b></p>\n'
+                        '<span class="tra-b">TR<i>A</i></span>'
+                        # LOCAL PATCH: Refresh: the launcher starts its page again (loading screen, intro, settings from disk)
+                        '<button class="refbtn" title="Refresh the launcher" aria-label="Refresh the launcher" '
+                        'sc-camel-on-click="{{refreshLauncher}}"><span>&#8635;</span>Refresh</button></div>\n      </div>\n'
                         '      </div>\n    </div>')
+# The studio and author lines sit under the SEGA / Sony lines, beside the TRA logo and Refresh (one block, no overflow).
+template = must_replace(template,
+                        '<span class="mark">Shinobi &copy; SEGA<br>PlayStation is a trademark of Sony</span>',
+                        '<div class="markcol"><span class="mark">Shinobi &copy; SEGA<br>PlayStation is a trademark of Sony</span>'
+                        '<p class="studio">Developed by <b>Twilight Orchard</b></p>'
+                        '<p class="studio">Created by <b>TheRealAfsan</b></p></div>')
 template = must_replace(template, '<p>Launcher and recompilation tooling by TheRealAfsan.</p>',
                         '<p>Developed by Twilight Orchard. Created by TheRealAfsan.</p>\n'
                         '                <p>Launcher and recompilation tooling by TheRealAfsan.</p>')
@@ -580,6 +907,29 @@ logic_start = template.index('class Component extends DCLogic')
 logic_end = template.index('</script>', logic_start)
 logic = template[logic_start:logic_end]
 
+# LOCAL PATCH: the Jukebox's tracks (the BGM*.ADX files in ROFSSMP.CVM) and the names the page shows. *_00_00T is a
+# stage's main music; *_03_00T plays later in the stage (the boss area); the E tracks are short pieces (events,
+# stage clear). The game logs "[jukebox] <TRACK> started" each time one starts, to check a name against.
+_JUKE = [('BGM00_00_01T', 'Title & menus'), ('BGM00_00_03T', 'Title & menus 2')]
+_STAGE_FILES = {
+    1: ['00_00T', '03_00T', '00_00E', '00_01E', '00_02E'], 2: ['00_00T', '00_00E', '00_01E'], 3: ['00_00T', '00_00E'],
+    4: ['00_00T', '00_00E'], 5: ['00_00T', '00_00E', '00_01E', '00_02E', '00_03E'], 6: ['00_00T', '03_00T', '00_00E'],
+    7: ['00_00T', '01_00T', '03_00T', '00_00E', '00_01E'], 8: ['00_00T', '03_00T', '00_00E']}
+for _st, _files in _STAGE_FILES.items():
+    _short = 0
+    for _f in _files:
+        if _f == '00_00T':
+            _name = 'Stage %d' % _st
+        elif _f == '01_00T':
+            _name = 'Stage %d - part 2' % _st
+        elif _f == '03_00T':
+            _name = 'Stage %d - boss' % _st
+        else:
+            _short += 1
+            _name = 'Stage %d - short piece %d' % (_st, _short)
+        _JUKE.append(('BGM%02d_%s' % (_st, _f), _name))
+JUKEBOX_JS = json.dumps([list(t) for t in _JUKE])
+
 
 def L(old, new, count=1):
     global logic
@@ -621,24 +971,60 @@ L("""    this.defaults = { res: '1080p', renderer: 'Vulkan', ws: true, vsync: fa
     this.state.restart = !!(init && init.restart);
     this.state.quitArmed = false;
     document.documentElement.classList.toggle('ingame', this.ingame);
+    // LOCAL PATCH: the boot screen. About 2 s of a retro LOADING bar (gold, in steps), then it fades away and the
+    // page's own intro animations start from the beginning (they wait, paused, under it). Not in the F1 menu.
+    if (!this.ingame && !document.querySelector('.boot')) {
+      const root = document.documentElement;
+      root.classList.add('booting');
+      const boot = document.createElement('div');
+      boot.className = 'boot';
+      boot.setAttribute('aria-hidden', 'true');
+      const BARS = 28; // the bar graph: thin bars rising like a tachometer's, the last few in yellow-green (redline)
+      let graph = '';
+      for (let i = 0; i < BARS; i++) graph += '<i style="height:' + (28 + 72 * Math.pow(i / (BARS - 1), 1.3)).toFixed(1) + '%"' + (i >= BARS - 4 ? ' class="hot-zone"' : '') + '></i>';
+      boot.innerHTML = '<video class="boot-vid" src="boot.mp4" autoplay muted loop playsinline></video><div class="boot-shade"></div><div class="boot-in"><div class="boot-top"><span class="boot-word">LOADING<i class="boot-dots"><b>.</b><b>.</b><b>.</b></i></span>'
+        + '<span class="boot-pct">0%</span></div><div class="boot-graph">' + graph + '</div>'
+        + '<div class="boot-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>'
+        + '<div class="boot-sub">SHINOBI &middot; PS2 RECOMP</div>'
+        + '<div class="boot-credits"><span>DEVELOPED BY TWILIGHT ORCHARD</span><span>THEREALAFSAN</span><span class="boot-tra">TRA</span></div></div>';
+      document.body.appendChild(boot);
+      const bars = Array.from(boot.querySelectorAll('.boot-graph i')), pct = boot.querySelector('.boot-pct');
+      const total = 4400, steps = BARS, start = performance.now(); // about 4.5 s with the hand-over
+      const tick = () => {
+        const k = Math.min(1, (performance.now() - start) / total);
+        // eased, then snapped to whole blocks: the bar fills in chunky retro steps
+        const eased = 1 - Math.pow(1 - k, 1.6);
+        const shown = Math.min(steps, Math.floor(eased * steps + 0.0001)) / steps;
+        const lit = Math.round(shown * steps);
+        bars.forEach((el, i) => { el.classList.toggle('on', i < lit); el.classList.toggle('hot', i < lit && el.classList.contains('hot-zone')); });
+        pct.textContent = Math.round(eased * 100) + '%';
+        if (k < 1) { requestAnimationFrame(tick); return; }
+        bars.forEach((el) => { el.classList.add('on'); el.classList.toggle('hot', el.classList.contains('hot-zone')); }); pct.textContent = '100%';
+        setTimeout(() => {
+          boot.classList.add('boot-out');
+          root.classList.remove('booting');
+          // the intro animations start now, from their beginning
+          document.getAnimations().forEach((a) => { if (!(a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('.boot'))) { try { a.currentTime = 0; a.play(); } catch (e) {} } });
+          setTimeout(() => boot.remove(), 520);
+        }, 160);
+      };
+      requestAnimationFrame(tick);
+    }
     this.navSetup();
     // Launcher music (launcher_assets/music.*, found by the host): loops while the launcher is open, fades in, pauses
     // while the game runs. The mute button in the title bar is remembered (launcher.ini).
     this.state.muted = !!(init && init.muted);
     document.documentElement.classList.toggle('muted', this.state.muted);
     this.music = null;
+    this.state.musicName = (init && init.musicName) || 'Original theme';
+    this.state.juke = (init && init.jukebox) || {};
+    // The installed version (version.txt beside the launcher; shown at the top of the Feature Set page).
+    this.appVersion = (init && init.version) || '';
+    // The kind of controller connected, from the host (launcher_pads.cpp; the game in the F1 menu): its button names.
+    this.state.padKind = (init && init.padKind) || null;
+    this._hostKind = !!(init && 'padKind' in init);""" + chr(10) + "    window.JUKEBOX_TRACKS = " + JUKEBOX_JS + ";" + """
     // The host names the file (null = none); a host that does not know about music yet -> music.mp3 beside this page.
-    const musicSrc = (init && 'music' in init) ? init.music : 'music.mp3';
-    if (musicSrc) {
-      this.music = new Audio(musicSrc);
-      this.music.addEventListener('error', () => { this.music = null; document.documentElement.classList.add('nomusic'); });
-      this.music.loop = true;
-      this.music.volume = 0;
-      this.music.muted = this.state.muted;
-      this.musicOn();
-    } else {
-      document.documentElement.classList.add('nomusic');
-    }""")
+    this.setMusic((init && 'music' in init) ? init.music : 'music.mp3', this.state.musicName === 'Original theme' ? 24 : 0);""")
 
 L("""  sig(s) {""",
   """  musicFade(to, ms, then) {
@@ -650,6 +1036,34 @@ L("""  sig(s) {""",
       this.music.volume = from + (to - from) * k;
       if (k >= 1) { clearInterval(this.fadeTimer); if (then) then(); }
     }, 30);
+  }
+
+  // LOCAL PATCH: start (or change to) a track; null = none. The launcher's Choose... / Default swap it at once.
+  setMusic(src, fromSec) {
+    if (this.music) { clearInterval(this.fadeTimer); this.music.pause(); this.music = null; }
+    document.documentElement.classList.toggle('nomusic', !src);
+    if (!src) return;
+    const music = new Audio(src);
+    music.addEventListener('error', () => {
+      if (this.music !== music) return;
+      this.music = null;
+      document.documentElement.classList.add('nomusic');
+      this.toastMsg('That music file could not be played');
+    });
+    // LOCAL PATCH: the launcher's own track starts at 0:24 (its bass drop, 28.55 s, lands on the art's slam and shake) and loops back there (the player's own tracks play whole).
+    if (fromSec) {
+      music.loop = false;
+      music.addEventListener('loadedmetadata', () => { try { if (music.currentTime < fromSec - 1) music.currentTime = Math.min(fromSec, Math.max(0, music.duration - 1)); } catch (e) {} }, { once: true });
+      music.addEventListener('ended', () => { try { music.currentTime = fromSec; } catch (e) {} const p = music.play(); if (p && p.catch) p.catch(() => {}); });
+    } else music.loop = true;
+    music.volume = 0;
+    music.muted = this.state.muted;
+    this.music = music;
+    if (!this.state.launch || this.state.launch === 'idle') {
+      // LOCAL PATCH: when the launcher opens, the music comes in 5 s after the loading screen starts; a track picked
+      // later plays at once.
+      this.musicOn(); // at once: the music starts with the launcher (its start point times the bass drop to the logo)
+    }
   }
 
   musicOn() {
@@ -681,6 +1095,7 @@ L("""  sig(s) {""",
 
   navFocus(el) {
     if (!el) return;
+    if (el !== this.navCurrent && !this._stickMoving) this.hap('move');
     document.querySelectorAll('.pad-focus').forEach((e) => e.classList.remove('pad-focus'));
     const target = el.matches('input[type=checkbox]') ? (el.closest('label') || el) : el;
     target.classList.add('pad-focus');
@@ -690,7 +1105,103 @@ L("""  sig(s) {""",
     this.navIdx = all.indexOf(el);
     this.navTxt = (target.textContent || '').trim();
     el.focus({ preventScroll: true });
+    // LOCAL PATCH: in a scrolling list (the Mod Menu, the Jukebox) the list glides to the control with a short motion
+    // blur; elsewhere the page just brings it into view.
+    const scroller = this.navScroller(target);
+    if (scroller) {
+      const s = scroller.getBoundingClientRect(), r = target.getBoundingClientRect();
+      const pad = 8;
+      let to = scroller.scrollTop;
+      if (r.top < s.top + pad) to += r.top - s.top - pad;
+      else if (r.bottom > s.bottom - pad) to += r.bottom - s.bottom + pad;
+      if (Math.abs(to - scroller.scrollTop) > 1) scroller.scrollTo({ top: to, behavior: 'smooth' });
+      return;
+    }
     target.scrollIntoView({ block: 'nearest' });
+  }
+
+  // LOCAL PATCH: the right stick scrolls the list in use (the selected control's, else the one on screen), faster the
+  // further it is pushed; a selection scrolled out of sight moves to the nearest row still in view.
+  stickScroll(v) {
+    let scroller = this.navCurrent && document.contains(this.navCurrent) ? this.navScroller(this.navCurrent) : null;
+    if (!scroller) {
+      const scope = document.querySelector('.dlg') || document;
+      scroller = Array.from(scope.querySelectorAll('div')).find((el) => {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy !== 'auto' && oy !== 'scroll') || el.scrollHeight <= el.clientHeight + 2) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }) || null;
+    }
+    if (!scroller) return;
+    // By the clock, not per frame (a 240 Hz screen would scroll 4x faster): about 60 px a second just past the dead
+    // zone, up to 420 px a second pushed all the way. Fractions are kept, so slow scrolling still moves.
+    const now = performance.now();
+    const dt = this._stickT && now - this._stickT < 100 ? (now - this._stickT) / 1000 : 1 / 60;
+    this._stickT = now;
+    const push = (Math.abs(v) - 0.2) / 0.8;
+    const pxPerSecond = 60 + 360 * push * push;
+    this._stickCarry = (this._stickCarry || 0) + Math.sign(v) * pxPerSecond * dt;
+    const whole = Math.trunc(this._stickCarry);
+    this._stickCarry -= whole;
+    if (!whole) return;
+    const before = scroller.scrollTop;
+    scroller.scrollTop += whole;
+    const moved = Math.abs(scroller.scrollTop - before);
+    if (moved) {
+      this._beadPx = (this._beadPx || 0) + moved;
+      if (this._beadPx >= 30) { this._beadPx = 0; this.hap('bead', Math.min(100, push * 100)); }
+    }
+    const cur = this.navCurrent;
+    if (!cur || !scroller.contains(cur)) return;
+    const s = scroller.getBoundingClientRect(), r = cur.getBoundingClientRect();
+    if (r.top >= s.top && r.bottom <= s.bottom) return;
+    let best = null, bestD = Infinity;
+    this.navItems().forEach((el) => {
+      if (!scroller.contains(el)) return;
+      const e = el.getBoundingClientRect();
+      if (e.top < s.top || e.bottom > s.bottom) return;
+      const d = Math.abs((e.top + e.bottom) / 2 - (r.top + r.bottom) / 2);
+      if (d < bestD) { bestD = d; best = el; }
+    });
+    if (best) { this._stickMoving = true; this.navFocus(best); this._stickMoving = false; }
+  }
+
+  // The nearest scrolling box (a list taller than its space) around a control, or null.
+  // LOCAL PATCH: menu haptics. The host plays them on the controller (the launcher: DualSense output report or
+  // XInput rumble; the F1 menu: the game's HD haptics), following the haptics switch and strength. Only while the page
+  // is driven by a controller (no buzz under the mouse or keyboard).
+  hap(kind, v) {
+    if (!this.host) return;
+    const now = performance.now();
+    if (now - (this._padT || 0) > 450) return;
+    const gap = kind === 'bead' ? 350 : kind === 'move' ? 30 : 60;
+    this._hapT = this._hapT || {};
+    if (now - (this._hapT[kind] || 0) < gap) return;
+    this._hapT[kind] = now;
+    this.host.postMessage('hap\\nkind=' + kind + '\\nv=' + Math.round(v || 0));
+  }
+
+  // LOCAL PATCH: the six language choices of the Languages page; the European four are locked until the disc is added.
+  langOpts(s, key) {
+    const LANGS = [['en', 'English'], ['ja', '日本語'], ['fr', 'Français'], ['de', 'Deutsch'], ['it', 'Italiano'], ['es', 'Español']];
+    const cur = s[key] || 'en';
+    return LANGS.map((o) => {
+      const locked = !s.euDisc && ['fr', 'de', 'it', 'es'].indexOf(o[0]) >= 0;
+      return { name: o[1], on: cur === o[0], cls: (cur === o[0] ? 'on' : '') + (locked ? ' locked' : ''),
+        pick: () => {
+          if (locked) { this.toastMsg('Add your European disc first (Choose, above)'); return; }
+          this.setState({ [key]: o[0] });
+        } };
+    });
+  }
+
+  navScroller(el) {
+    for (let p = el && el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 2) return p;
+    }
+    return null;
   }
 
   // After a redraw the marked control is a new element: find it again (same text, nearest place) and mark it.
@@ -726,8 +1237,49 @@ L("""  sig(s) {""",
   // Moves to the nearest control in direction (dx, dy): candidates must lie that way; ones overlapping the current
   // control across the move (same row for left/right, same column for up/down) win, then the closest.
   navDir(dx, dy) {
-    const items = this.navItems();
-    if (!items.length) return;
+    const all = this.navItems();
+    if (!all.length) return;
+    // LOCAL PATCH: up / down inside a scrolling list stay in that list (its rows above or below, even scrolled out of
+    // sight); only past its first or last row does the move leave it.
+    // LOCAL PATCH: up / down go row by row, in page order, through the column (or the open window) the selection is
+    // in: a row is the controls side by side on one line (a row of options, Choose + Default, Reset + Low-end PC; the
+    // page switcher counts as one). The column is kept (Default stays on Default); a row of options is entered at its
+    // chosen option. Order, not distance on screen: scrolled lists (still moving) and wide buttons no longer make it
+    // jump past rows. Open drop-down lists keep the nearest-control search below.
+    let items = all;
+    const cur0 = this.navCurrent && document.contains(this.navCurrent) ? this.navCurrent : null;
+    if (dy && cur0 && cur0.matches('.flist')) {
+      const max = cur0.scrollHeight - cur0.clientHeight;
+      if ((dy > 0 && cur0.scrollTop < max - 1) || (dy < 0 && cur0.scrollTop > 1)) {
+        cur0.scrollBy({ top: dy * 96, behavior: 'smooth' });
+        return;
+      }
+    }
+    if (dy && cur0 && !document.querySelector('.menu')) {
+      const scopeEl = cur0.closest('.dlg') || cur0.closest('.left') || cur0.closest('.right');
+      if (scopeEl) {
+        const inScope = all.filter((el) => scopeEl.contains(el));
+        const top = (el) => (el.matches('input[type=checkbox]') ? (el.closest('label') || el) : el).getBoundingClientRect().top;
+        const rows = [];
+        let last = null;
+        inScope.forEach((el) => {
+          const nav = el.closest('.tabnav');
+          const same = last && (nav ? last.nav === nav
+            : !last.nav && Math.abs(last.top - top(el)) < 8);
+          if (same) last.items.push(el);
+          else { last = { nav, parent: el.parentElement, top: top(el), items: [el] }; rows.push(last); }
+        });
+        const ri = rows.findIndex((r) => r.items.includes(cur0));
+        if (ri >= 0) {
+          const next = rows[ri + dy];
+          if (!next) return; // the first / last row: stay
+          const col = rows[ri].items.indexOf(cur0);
+          const chosen = next.items.length > 1 && rows[ri].items.length === 1 ? next.items.find((el) => el.classList.contains('on')) : null;
+          this.navFocus(chosen || next.items[Math.min(col, next.items.length - 1)]);
+          return;
+        }
+      }
+    }
     const cur = this.navCurrent && document.contains(this.navCurrent) ? this.navCurrent : null;
     if (!cur) { this.navFocus(items[0]); return; }
     const box = (el) => (el.matches('input[type=checkbox]') ? (el.closest('label') || el) : el).getBoundingClientRect();
@@ -754,7 +1306,7 @@ L("""  sig(s) {""",
   navSide(delta) {
     const el = this.navCurrent;
     if (el && el.matches('input[type=range]')) {
-      const v = Math.min(Number(el.max), Math.max(Number(el.min), Number(el.value) + delta));
+      const v = Math.min(Number(el.max), Math.max(Number(el.min), Number(el.value) + delta * (Number(el.step) || 1)));
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, String(v));
       el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -771,6 +1323,7 @@ L("""  sig(s) {""",
   }
 
   navBack() {
+    this.hap('back');
     const x = document.querySelector('.dlg .x');
     if (x) { x.click(); setTimeout(() => this.navMove(0), 0); return; }
     if (this.state.resOpen || this.state.winOpen) {
@@ -782,6 +1335,7 @@ L("""  sig(s) {""",
   }
 
   navPress() {
+    this.hap('press');
     const el = this.navCurrent;
     if (!el || !document.contains(el)) { this.navMove(0); return; }
     const opener = el.matches('.sel') ? el : null;
@@ -809,6 +1363,9 @@ L("""  sig(s) {""",
         e.preventDefault(); this.navSide(k === 'ArrowRight' ? 1 : -1);
       }
       else if (k === 'Escape') { e.preventDefault(); this.navBack(); }
+      else if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.ctrlKey && !e.altKey && !(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'checkbox' && e.target.type !== 'range')) {
+        e.preventDefault(); this.navTab(e.code === 'KeyQ' ? -1 : 1); // settings pages (the controller's L1 / R1)
+      }
       else if (k === 'F1' && this.ingame) { e.preventDefault(); if (this.host) this.host.postMessage('resume'); }
     });
     const held = {};
@@ -817,8 +1374,10 @@ L("""  sig(s) {""",
       const now = performance.now();
       const h = held[name];
       if (!down) { held[name] = null; return; }
-      if (!h) { held[name] = { next: now + REPEAT_FIRST }; fn(); return; }
-      if (now >= h.next) { h.next = now + REPEAT_NEXT; fn(); }
+      // In the F1 menu the game sends its controller too (padCmd): a press counts once, from whichever source had it.
+      const claim = () => { this._padT = now; if (this.ingame) { this._padSrc = 'page'; this._padSrcT = now; } };
+      if (!h) { held[name] = { next: now + REPEAT_FIRST }; claim(); fn(); return; }
+      if (now >= h.next) { h.next = now + REPEAT_NEXT; claim(); fn(); }
     };
     let primed = false;
     window.__nav = this;
@@ -833,9 +1392,17 @@ L("""  sig(s) {""",
           if (pads.some((p0) => p0.buttons[i] && p0.buttons[i].pressed)) held[n] = { next: Infinity };
         });
       }
+      // LOCAL PATCH: the tab hints follow the controller (L1 / R1 on PlayStation pads, LB / RB otherwise).
+      if (pads.length) {
+        const kind = /054c|sony|dualsense|dualshock|playstation|wireless controller/i.test(pads[0].id || '') ? 'ps' : 'xbox';
+        if (this.state && this.state.padKind !== kind && !this.hostPad && !this._hostKind) this.setState({ padKind: kind });
+      }
       // While the game is starting or running the controller belongs to the game: Cross would press the launcher's Stop Game button.
       const gameBusy = !this.ingame && this.state && this.state.launch !== 'idle';
-      if (pads.length && !gameBusy && !this.ingame && !(this.state && this.state.listening)) {
+      // LOCAL PATCH: in the F1 menu the game sends its controller (padCmd), but a controller switched on after the game
+      // started may only reach this page: it is read here too, unless the game's has been driving the menu just now.
+      const hostDriving = this.ingame && this._padSrc === 'host' && performance.now() - (this._padSrcT || 0) < 1500;
+      if (pads.length && !gameBusy && !hostDriving && !(this.state && this.state.listening)) {
         const RAW = { 0: 1, 1: 2, 2: 0, 3: 3, 9: 9 }; // standard index -> raw Sony index
         const hat = (p) => { const v = p.axes[9]; if (v === undefined || v > 1.05 || v < -1.05) return -1; return Math.round((v + 1) * 3.5) % 8; };
         const press = (p, i) => {
@@ -862,19 +1429,21 @@ L("""  sig(s) {""",
         edge('left', btn(14) || ax(0) < -0.6, () => this.navSide(-1));
         edge('right', btn(15) || ax(0) > 0.6, () => this.navSide(1));
         edge('cross', btn(0), () => this.navPress());
-        const tabStep = (d) => {
-          const tabs = Array.from(document.querySelectorAll('.tabs .seg'));
-          if (!tabs.length || document.querySelector('.dlg')) return;
-          const i = Math.max(0, tabs.findIndex((t) => t.classList.contains('on')));
-          const t = tabs[(i + d + tabs.length) % tabs.length];
-          t.click();
-          setTimeout(() => this.navFocus(document.querySelectorAll('.tabs .seg')[(i + d + tabs.length) % tabs.length]), 30);
-        };
+        const tabStep = (d) => this.navTab(d); // LOCAL PATCH: one settings page at a time (navTab / tabGo)
         edge('l1', btn(4), () => tabStep(-1));
         edge('r1', btn(5), () => tabStep(1));
         edge('circle', btn(1), () => this.navBack());
         }
         edge('start', btn(9), () => { if (this.ingame && this.host) this.host.postMessage('resume'); });
+      }
+      // LOCAL PATCH: the right stick (up / down) scrolls the list in use, from this page's controllers or the host's
+      // (the launcher's DualSense reader, the game in the F1 menu: "pad:rsy:<-100..100>").
+      {
+        let v = 0;
+        if (!gameBusy && !(this.state && this.state.listening))
+          pads.forEach((p) => { if (p.mapping === 'standard') { const a = p.axes[3] || 0; if (Math.abs(a) > Math.abs(v)) v = a; } });
+        if (this._hostRsyT && performance.now() - this._hostRsyT < 250 && Math.abs(this._hostRsy) > Math.abs(v)) v = this._hostRsy;
+        if (Math.abs(v) > 0.2) this.stickScroll(v);
       }
       this.navRestore();
       requestAnimationFrame(poll);
@@ -914,7 +1483,7 @@ L("""  sig(s) {
   // The F1 menu's controller, read by the game and sent here (see ps2_ingame_menu.h padEvent).
   padCmd(name) {
     // The launcher reads a DualSense itself (launcher_dualsense.cpp): from now on the page's own Gamepad API leaves Sony pads to it.
-    if (name === 'host') { this.hostPad = true; return; }
+    if (name === 'host') { this.hostPad = true; if (this.state && this.state.padKind !== 'ps') this.setState({ padKind: 'ps' }); return; }
     if (name === 'lost') { this.hostPad = false; return; }
     // While the game is starting or running the controller belongs to the game.
     if (!this.ingame && this.state && this.state.launch !== 'idle') return;
@@ -936,13 +1505,35 @@ L("""  sig(s) {
     else if (name === 'start' && this.ingame && this.host) this.host.postMessage('resume');
   }
 
+  // LOCAL PATCH: settings pages, one at a time: L1 / R1 (LB / RB, Q / E, the arrows) step through them in order.
   navTab(d) {
-    const tabs = Array.from(document.querySelectorAll('.tabs .seg'));
-    if (!tabs.length || document.querySelector('.dlg')) return;
-    const i = Math.max(0, tabs.findIndex((t) => t.classList.contains('on')));
-    const n = (i + d + tabs.length) % tabs.length;
-    tabs[n].click();
-    setTimeout(() => this.navFocus(document.querySelectorAll('.tabs .seg')[n]), 30);
+    if (document.querySelector('.dlg')) return;
+    const ids = ['display', 'graphics', 'effects', 'perf', 'jukebox', 'languages', 'controller', 'features'];
+    const i = Math.max(0, ids.indexOf(this.state.tab || 'display'));
+    this.tabGo(ids[(i + d + ids.length) % ids.length], d);
+  }
+
+  // Shows a settings page; the page name and the page slide in from the side it came from, with a motion blur.
+  tabGo(id, d) {
+    const ids = ['display', 'graphics', 'effects', 'perf', 'jukebox', 'languages', 'controller', 'features'];
+    const cur = this.state.tab || 'display';
+    if (!id || id === cur) return;
+    if (d === undefined) d = ids.indexOf(id) > ids.indexOf(cur) ? 1 : -1;
+    document.documentElement.classList.add('tabbed');
+    this.setState({ tab: id, resOpen: false, winOpen: false });
+    this.hap('tab');
+    requestAnimationFrame(() => {
+      const nav = document.querySelector('.tabnav');
+      if (!nav || !nav.animate) return;
+      const slide = (px, blur) => [
+        { opacity: 0, transform: 'translateX(' + px + 'px)', filter: 'blur(' + blur + 'px)' },
+        { opacity: 1, transform: 'translateX(0)', filter: 'blur(0)' }];
+      const name = nav.querySelector('.tname');
+      if (name) name.animate(slide(d * 36, 7), { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
+      Array.from(nav.parentElement.querySelectorAll(':scope > sc-if > *')).forEach((el, k) => {
+        el.animate(slide(d * 26, 5), { duration: 320, delay: Math.min(k, 6) * 18, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' });
+      });
+    });
   }
 
   onHost(msg) {
@@ -970,13 +1561,36 @@ L("""  keyName(e) {
     return k.length === 1 ? k.toUpperCase() : k;
   }""",
   """  keyName(e) {
-    const k = e.key;
-    const map = { ' ': 'SPACE', ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT', Enter: 'ENTER',
-      Backspace: 'BACKSPACE', Tab: 'TAB', Insert: 'INSERT', Delete: 'DELETE', Home: 'HOME', End: 'END', PageUp: 'PAGE_UP', PageDown: 'PAGE_DOWN' };
-    if (map[k]) return map[k];
-    if (e.code && e.code.indexOf('Numpad') === 0 && /^[0-9]$/.test(k)) return 'KP_' + k;
-    return k.length === 1 ? k.toUpperCase() : k.toUpperCase();
+    // LOCAL PATCH (GitHub issue #11): by the physical key (e.code), named as the game knows it (ps2_settings.cpp
+    // keyNames). e.key gave 'SHIFT' / 'CONTROL' / ',' for Shift, Ctrl and punctuation, which the game did not know, so
+    // those bindings did nothing. null = a key the game cannot use (the binding is left as it was).
+    const c = e.code || '';
+    const codes = { Space: 'SPACE', ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT',
+      Enter: 'ENTER', NumpadEnter: 'KP_ENTER', Backspace: 'BACKSPACE', Tab: 'TAB', Escape: 'ESCAPE', Insert: 'INSERT',
+      Delete: 'DELETE', Home: 'HOME', End: 'END', PageUp: 'PAGE_UP', PageDown: 'PAGE_DOWN',
+      ShiftLeft: 'LEFT_SHIFT', ShiftRight: 'RIGHT_SHIFT', ControlLeft: 'LEFT_CONTROL', ControlRight: 'RIGHT_CONTROL',
+      AltLeft: 'LEFT_ALT', AltRight: 'RIGHT_ALT', Comma: 'COMMA', Period: 'PERIOD', Slash: 'SLASH',
+      Semicolon: 'SEMICOLON', Minus: 'MINUS', Equal: 'EQUAL', Quote: 'APOSTROPHE', Backquote: 'GRAVE',
+      BracketLeft: 'LEFT_BRACKET', BracketRight: 'RIGHT_BRACKET', Backslash: 'BACKSLASH' };
+    if (codes[c]) return codes[c];
+    let m = /^Key([A-Z])$/.exec(c); if (m) return m[1];
+    m = /^Digit([0-9])$/.exec(c); if (m) return m[1];
+    m = /^Numpad([0-9])$/.exec(c); if (m) return 'KP_' + m[1];
+    // no code (an old WebView): the key's text
+    const k = e.key || '';
+    if (k === ' ') return 'SPACE';
+    if (/^[a-z0-9]$/i.test(k)) return k.toUpperCase();
+    if (k === 'Shift') return e.location === 2 ? 'RIGHT_SHIFT' : 'LEFT_SHIFT';
+    if (k === 'Control') return e.location === 2 ? 'RIGHT_CONTROL' : 'LEFT_CONTROL';
+    return null;
   }""")
+# LOCAL PATCH (GitHub issue #11): Shift, Ctrl and Alt can be bound (only the Windows key is ignored); a key the game
+# cannot use leaves the binding as it was.
+L("""          if (['Shift', 'Control', 'Alt', 'Meta'].indexOf(e.key) >= 0) return;
+          const name = this.keyName(e);""",
+  """          if (e.key === 'Meta' || e.key === 'OS') return;
+          const name = this.keyName(e);
+          if (!name) { this.toastMsg('That key cannot be used - try another'); return; }""")
 
 L("""    const RES = [['720p', '1280 x 720'], ['1080p', '1920 x 1080'], ['1440p', '2560 x 1440'], ['4K', '3840 x 2160']];""",
   """    // The PCSX2 renderer draws at a whole multiple of the PS2's 448 lines.
@@ -1151,7 +1765,21 @@ L("""    this.state.restart = !!(init && init.restart);""",
     this.state.installPct = -1;
     this.state.installFile = '';""")
 L("""    else if (m.indexOf('error:') === 0) {""",
-  """    else if (m.indexOf('iso:') === 0) { const a = m.slice(4).split('|'); this.setState({ iso: a[0] === 'ok' ? (a[1] || '') : this.state.iso, isoFound: a[0] === 'ok' ? true : this.state.isoFound, isoMsg: a.slice(2).join('|') }); }
+  """    else if (m.indexOf('eudisc:') === 0) {
+      const a = m.slice(7).split('|');
+      if (a[0] === 'ok') { this.setState({ euDisc: a[1] || '' }); this.toastMsg(a.slice(2).join('|')); }
+      else if (a[0] === 'bad') this.toastMsg(a.slice(2).join('|') || 'That disc image could not be used');
+      else {
+        // removed: the European choices fall back to English
+        const eu = (c) => ['fr', 'de', 'it', 'es'].indexOf(c) >= 0;
+        this.setState({ euDisc: '', lvoice: eu(this.state.lvoice) ? 'en' : this.state.lvoice, ltext: eu(this.state.ltext) ? 'en' : this.state.ltext });
+        this.toastMsg('European disc removed: English is used instead');
+      }
+    }
+    else if (m.indexOf('juke:') === 0) { const a = m.slice(5).split('|'); const j = Object.assign({}, this.state.juke); if (a[1]) j[a[0]] = a.slice(1).join('|'); else delete j[a[0]]; this.setState({ juke: j }); this.toastMsg(a[1] ? 'Jukebox: ' + a.slice(1).join('|') : 'Jukebox: original music back'); }
+    else if (m.indexOf('juke-error:') === 0) { this.toastMsg(m.slice(11)); }
+    else if (m.indexOf('music:') === 0) { const a = m.slice(6).split('|'); this.setState({ musicName: a.slice(1).join('|') || 'Original theme' }); this.setMusic(a[0] || null, (a.slice(1).join('|') || 'Original theme') === 'Original theme' ? 24 : 0); this.toastMsg('Launcher music: ' + (a.slice(1).join('|') || 'Original theme')); }
+    else if (m.indexOf('iso:') === 0) { const a = m.slice(4).split('|'); this.setState({ iso: a[0] === 'ok' ? (a[1] || '') : this.state.iso, isoFound: a[0] === 'ok' ? true : this.state.isoFound, isoMsg: a.slice(2).join('|') }); }
     else if (m.indexOf('install:') === 0) { const a = m.slice(8).split('|'); this.setState({ installPct: parseInt(a[0], 10) || 0, installFile: a.slice(1).join('|') }); }
     else if (m === 'installed') { this.setState({ installed: true, installPct: -1, installFile: '', isoMsg: 'The game files are set up. You can close this and press Play.' }); this.toastMsg('Game files set up'); }
     else if (m.indexOf('install-error:') === 0) { this.setState({ installPct: -1, installFile: '', isoMsg: m.slice(14) }); this.toastMsg(m.slice(14)); }
@@ -1425,7 +2053,7 @@ L("""blend: 'basic' };
     this.defBinds""", """blend: 'basic', win: 'borderless', haptics: true, hapStr: 10, trig: true };
     this.defBinds""")
 L("""      resOpen: false, modal: null, guide: 0,
-      launch: 'idle'""", """      resOpen: false, winOpen: false, tab: 'display', modal: null, guide: 0,
+      launch: 'idle'""", """      resOpen: false, winOpen: false, tab: (init && init.ingame) ? 'display' : 'features', modal: null, guide: 0,
       launch: 'idle'""")
 L("""blend: s.blend, scarf: s.scarf || '', bind: s.bind, mods: s.mods });""",
   """blend: s.blend, scarf: s.scarf || '', win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bind, mods: s.mods });""")
@@ -1433,7 +2061,12 @@ L("""    add('scarf', s.scarf || 'original');""", """    add('scarf', s.scarf ||
     add('win', s.win || 'borderless'); add('haptics', s.haptics ? 1 : 0); add('hapStr', s.hapStr || 10); add('trig', s.trig ? 1 : 0);""")
 L("""      setTex: (e) => this.setState({ tex: Number(e.target.value) }),""",
   """      setTex: (e) => this.setState({ tex: Number(e.target.value) }),
-      tabOpts: [['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']].map((t) => ({ name: t[1], on: s.tab === t[0], cls: s.tab === t[0] ? 'on' : '', pick: () => { document.documentElement.classList.add('tabbed'); this.setState({ tab: t[0], resOpen: false, winOpen: false }); } })),
+      tabOpts: [['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']].map((t) => ({ name: t[1], on: s.tab === t[0], cls: s.tab === t[0] ? 'on' : '', pick: () => this.tabGo(t[0]) })),
+      tabName: ({ display: 'Display', graphics: 'Graphics', effects: 'Effects', perf: 'Performance', jukebox: 'Sound & Jukebox', languages: 'Languages', controller: 'Controls', features: 'Feature Set' })[s.tab || 'display'] || 'Display',
+      tabPrev: () => this.navTab(-1),
+      tabNext: () => this.navTab(1),
+      tabHintL: s.padKind === 'ps' ? 'L1' : s.padKind === 'xbox' ? 'LB' : s.padKind === 'nintendo' ? 'L' : 'Q',
+      tabHintR: s.padKind === 'ps' ? 'R1' : s.padKind === 'xbox' ? 'RB' : s.padKind === 'nintendo' ? 'R' : 'E',
       tabDisplay: s.tab === 'display',
       tabGraphics: s.tab === 'graphics',
       tabController: s.tab === 'controller',
@@ -1456,16 +2089,47 @@ L("""      setTex: (e) => this.setState({ tex: Number(e.target.value) }),""",
 L("""win: 'borderless', haptics: true, hapStr: 10, trig: true };""",
   """win: 'borderless', haptics: true, hapStr: 10, trig: true, texf: 'ps2', scrf: 'smooth', dith: true, mip: true, upfix: true, ovl: false, cam: false };""")
 L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bind""",
-  """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
+  """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, lvoice: s.lvoice || 'en', ltext: s.ltext || 'en', bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('lvoice', s.lvoice || 'en'); add('ltext', s.ltext || 'en'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
-  """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
+  """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['jukebox', 'Jukebox'], ['languages', 'Languages'], ['controller', 'Controls'], ['features', 'Feature Set']]""")
 L("""      tabController: s.tab === 'controller',""",
   """      tabController: s.tab === 'controller',
       tabEffects: s.tab === 'effects',
       tabPerf: s.tab === 'perf',
+      tabJukebox: s.tab === 'jukebox',
+      tabFeatures: s.tab === 'features',
+      tabLanguages: s.tab === 'languages',
+      langVoiceOpts: this.langOpts(s, 'lvoice'),
+      langTextOpts: this.langOpts(s, 'ltext'),
+      euDiscText: s.euDisc ? s.euDisc.split(String.fromCharCode(92)).join('/').split('/').pop() : 'Not added: French, German, Italian and Spanish are locked',
+      euDiscPath: s.euDisc || '',
+      euDiscStyle: s.euDisc ? 'color:#e8c76a' : '',
+      euPick: () => { if (this.ingame) { this.toastMsg('Add the European disc from the launcher (outside the game)'); return; } if (this.host) this.host.postMessage('eudiscpick'); },
+      euClear: () => { if (this.ingame) { this.toastMsg('Remove the European disc from the launcher (outside the game)'); return; } if (this.host) this.host.postMessage('eudiscclear'); },
+      versionText: this.appVersion ? 'v' + this.appVersion : 'Development build',
+      jukeRows: (window.JUKEBOX_TRACKS || []).map((t) => {
+        const file = (s.juke || {})[t[0]];
+        return { code: t[0], label: t[1], file: file ? file : 'Original', style: file ? 'color:#e8c76a' : '',
+          pick: () => { if (this.host) this.host.postMessage('jukepick\\nkey=' + t[0]); },
+          reset: () => { if (this.host) this.host.postMessage('jukedefault\\nkey=' + t[0]); } };
+      }),
+      jukeFolder: () => { if (this.host) this.host.postMessage('jukefolder'); },
+      hapChips: [[3, 'Light'], [6, 'Medium'], [8, 'Strong'], [10, 'Max']].map((o, i, all) => {
+        const v = +(s.hapStr || 10);
+        const near = all.reduce((b, x) => Math.abs(x[0] - v) < Math.abs(b[0] - v) ? x : b, all[0])[0] === o[0];
+        return { name: o[1], on: near, cls: near ? 'on' : '', pick: () => this.setState({ hapStr: o[0] }) };
+      }),
+      refreshLauncher: () => { if (this.host) this.host.postMessage('reload'); else location.reload(); },
+      musicName: s.musicName || 'Original theme',
+      pickMusic: () => { if (this.host) this.host.postMessage('musicpick'); },
+      defaultMusic: () => { if (this.host) this.host.postMessage('musicdefault'); },
+      volNum: Math.max(0, Math.min(100, Number(s.vol || 100))),
+      volName: Number(s.vol || 100) <= 0 ? 'Mute' : Number(s.vol || 100) + '%',
+      volBg: fill(Math.max(0, Math.min(100, Number(s.vol || 100))) / 25),
+      setVol: (e) => this.setState({ vol: String(Math.round(Number(e.target.value) / 5) * 5) }),
       volOpts: [['100', '100%'], ['80', '80%'], ['60', '60%'], ['40', '40%'], ['20', '20%'], ['0', 'Mute']].map((o) => ({ name: o[1], on: String(s.vol || '100') === o[0], cls: String(s.vol || '100') === o[0] ? 'on' : '', pick: () => this.setState({ vol: o[0] }) })),
       fgtOpts: [['monitor', 'Auto'], ['120', '120'], ['144', '144'], ['240', '240'], ['360', '360'], ['unlimited', 'Max']].map((o) => ({ name: o[1], on: (s.fgt || 'monitor') === o[0], cls: (s.fgt || 'monitor') === o[0] ? 'on' : '', pick: () => this.setState({ fgt: o[0] }) })),
       blendOpts: [['minimum', 'Min'], ['basic', 'Basic'], ['medium', 'Medium'], ['high', 'High']].map((o) => ({ name: o[1], on: (s.blend || 'basic') === o[0], cls: (s.blend || 'basic') === o[0] ? 'on' : '', pick: () => this.setState({ blend: o[0] }) })),
@@ -1555,7 +2219,16 @@ L("""      // While the game is starting or running the controller belongs to th
       // While the game is starting or running the controller belongs to the game: Cross would press the launcher's Stop Game button.""")
 L("""    if (name === 'lost') { this.hostPad = false; return; }""",
   """    if (name === 'lost') { this.hostPad = false; return; }
-    if (this.state && this.state.listening && this.state.device === 'gamepad') { this.padCapture(name); return; }""")
+    if (name.indexOf('rsy:') === 0) { this._hostRsy = (parseInt(name.slice(4), 10) || 0) / 100; this._hostRsyT = performance.now(); this._padT = performance.now(); return; }
+    if (name !== 'host' && name !== 'lost' && name.indexOf('kind-') !== 0) this._padT = performance.now();
+    if (name.indexOf('kind-') === 0) { this._hostKind = true; const k = name.slice(5); this.setState({ padKind: k === 'none' ? null : k }); return; }
+    if (this.state && this.state.listening && this.state.device === 'gamepad') { this.padCapture(name); return; }
+    // F1 menu: a press counts once (the page may read the same controller itself, see navSetup's poll).
+    if (this.ingame) {
+      const t = performance.now();
+      if (this._padSrc === 'page' && t - (this._padSrcT || 0) < 1500) return;
+      this._padSrc = 'host'; this._padSrcT = t;
+    }""")
 L("""  navTab(d) {""",
   """  padCapture(name) {
     const s = this.state;
@@ -1587,7 +2260,9 @@ L("""    const modRows = MODS.map((m) => ({""",
       ['dumptex', 'Save textures (pack makers)', 'Saves every texture the game uses to textures/SLUS-20459/dumps to make an HD pack from. Slows the game: leave it off to play.', false],
       ['nohunger', 'No sword hunger (Shift+F7)', 'Akujiki no longer drains your health when it has not killed for a while.', false],
       ['noscarf', 'Remove scarf (Shift+F8)', 'Hotsuma without his scarf.', false],
-      ['scol', 'Scarf body collision (Shift+F9)', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true]
+      ['scol', 'Scarf body collision (Shift+F9)', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true],
+      ['haptics', 'DualSense haptics', 'Footsteps, sword hits, shuriken, dash and ninja magic felt in a DualSense / DualSense Edge (USB or Bluetooth). Live in game.', true],
+      ['trig', 'L2 trigger resistance', 'L2 stiffens part way down and clicks through just before the ninja magic fires. Live in game.', true]
     ];
     const gameModRows = GAME_MODS.map((m) => {
       const on = m[3] ? s[m[0]] !== false : !!s[m[0]];
@@ -1682,6 +2357,26 @@ MONO = (
     '::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:#0a0a0a}'
     '::-webkit-scrollbar-thumb{background:#333;border-radius:5px}::-webkit-scrollbar-thumb:hover{background:#555}')
 template = must_replace(template, '@media (prefers-reduced-motion:reduce)', MONO + '@media (prefers-reduced-motion:reduce)')
+# LOCAL PATCH: smaller download. Every picture of 20 KB or more becomes WebP (WebView2 shows it natively): photos at
+# quality 85, pictures with transparency at quality 90 with their alpha kept. Kept only where it is smaller.
+_webp_saved = 0
+for _uid, _res in manifest.items():
+    if not isinstance(_res, dict) or _res.get('compressed') or _res.get('mime') not in ('image/jpeg', 'image/png'):
+        continue
+    _raw = base64.b64decode(_res['data'])
+    if len(_raw) < 20000:
+        continue
+    _im = Image.open(io.BytesIO(_raw))
+    _buf = io.BytesIO()
+    if _im.mode in ('RGBA', 'LA', 'P'):
+        _im.convert('RGBA').save(_buf, 'WEBP', quality=90, method=6)
+    else:
+        _im.convert('RGB').save(_buf, 'WEBP', quality=85, method=6)
+    if _buf.tell() < len(_raw):
+        _webp_saved += len(_raw) - _buf.tell()
+        _res['mime'] = 'image/webp'
+        _res['data'] = base64.b64encode(_buf.getvalue()).decode()
+print('pictures as WebP: %d KB smaller' % (_webp_saved // 1024))
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))
 set_block('template', json.dumps(template).replace('</', r'<\u002F'))  # keep </script> inside the block escaped
 os.makedirs(os.path.dirname(out_path), exist_ok=True)

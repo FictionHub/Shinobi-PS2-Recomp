@@ -27,6 +27,7 @@
 #include "WebView2EnvironmentOptions.h"
 
 #include "launcher_dualsense.h"
+#include "launcher_pads.h" // LOCAL PATCH: the kind of controller connected (button names on the page)
 #include "launcher_update.h"
 #include "launcher_pack.h"
 #include "launcher_ini.h"
@@ -35,6 +36,8 @@
 #include "launcher_settings_map.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cwctype>
 #include <cstdio>
 #include <fstream>
 #include <cstdlib>
@@ -414,6 +417,115 @@ namespace
         return path;
     }
 
+    // LOCAL PATCH: a "Choose launcher music" dialog; empty when cancelled.
+    // forGame: the jukebox (the game decodes mp3, ogg and wav); else the launcher's own music (anything WebView2 plays).
+    fs::path browseForMusic(bool forGame = false, const std::wstring &title = L"Choose the launcher's music")
+    {
+        ComPtr<IFileOpenDialog> dialog;
+        if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
+            return {};
+        const COMDLG_FILTERSPEC launcherFilters[] = {
+            {L"Music (*.mp3, *.ogg, *.m4a, *.wav, *.flac, *.opus, *.webm)", L"*.mp3;*.ogg;*.m4a;*.wav;*.flac;*.opus;*.webm"},
+            {L"All files", L"*.*"}};
+        const COMDLG_FILTERSPEC gameFilters[] = {{L"Music (*.mp3, *.ogg, *.wav)", L"*.mp3;*.ogg;*.wav"}};
+        if (forGame)
+            dialog->SetFileTypes(1, gameFilters);
+        else
+            dialog->SetFileTypes(2, launcherFilters);
+        dialog->SetTitle(title.c_str());
+        DWORD options = 0;
+        dialog->GetOptions(&options);
+        dialog->SetOptions(options | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST | FOS_FORCEFILESYSTEM);
+        if (FAILED(dialog->Show(g_hwnd)))
+            return {};
+        ComPtr<IShellItem> item;
+        if (FAILED(dialog->GetResult(&item)))
+            return {};
+        PWSTR name = nullptr;
+        if (FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &name)) || !name)
+            return {};
+        fs::path path(name);
+        CoTaskMemFree(name);
+        return path;
+    }
+
+    // LOCAL PATCH: the Jukebox (ps2_jukebox.cpp in the game). A track's replacement is jukebox/<TRACK>.mp3|ogg|wav beside
+    // the game folder; the name the player knows it by is in launcher.ini [jukebox] <TRACK> = <file name>.
+    bool jukeboxTrack(const std::string &key)
+    {
+        if (key.size() < 8 || key.size() > 24)
+            return false;
+        for (char c : key)
+            if (!(std::isupper(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)) || c == '_'))
+                return false;
+        return key.rfind("BGM", 0) == 0;
+    }
+
+    fs::path jukeboxFile(const std::string &key)
+    {
+        std::error_code ec;
+        for (const char *ext : {".mp3", ".ogg", ".wav"})
+        {
+            const fs::path path = g_root / "jukebox" / (key + ext);
+            if (fs::exists(path, ec))
+                return path;
+        }
+        return {};
+    }
+
+    // {"BGM01_00_00T":"my song.mp3",...} for the page: the tracks that have a file.
+    std::string jukeboxJson()
+    {
+        std::string out = "{";
+        std::error_code ec;
+        bool first = true;
+        for (const auto &entry : fs::directory_iterator(g_root / "jukebox", ec))
+        {
+            const std::string key = narrow(entry.path().stem().wstring());
+            if (!jukeboxTrack(key) || jukeboxFile(key) != entry.path())
+                continue;
+            std::string shown = g_mine.get("jukebox", key.c_str(), "");
+            if (shown.empty())
+                shown = narrow(entry.path().filename().wstring());
+            out += (first ? "" : ",") + launcher::jsonString(key) + ":" + launcher::jsonString(shown);
+            first = false;
+        }
+        return out + "}";
+    }
+
+    void jukeboxSet(const std::string &key, bool pick)
+    {
+        if (!jukeboxTrack(key))
+            return;
+        std::error_code ec;
+        fs::path chosen;
+        if (pick)
+        {
+            chosen = browseForMusic(true, L"Choose music for this track (mp3, ogg or wav)");
+            if (chosen.empty())
+                return;
+        }
+        fs::create_directories(g_root / "jukebox", ec);
+        for (const char *ext : {".mp3", ".ogg", ".wav"})
+            fs::remove(g_root / "jukebox" / (key + ext), ec);
+        if (pick)
+        {
+            std::wstring ext = chosen.extension().wstring();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+            const fs::path target = g_root / "jukebox" / (fs::path(widen(key)).wstring() + ext);
+            if (!fs::copy_file(chosen, target, fs::copy_options::overwrite_existing, ec))
+            {
+                post(L"juke-error:Could not copy that file into the jukebox folder.");
+                return;
+            }
+            g_mine.set("jukebox", key.c_str(), narrow(chosen.filename().wstring()));
+        }
+        else
+            g_mine.set("jukebox", key.c_str(), "");
+        g_mine.save((g_root / "launcher.ini").string());
+        post(widen("juke:" + key + "|" + (pick ? narrow(chosen.filename().wstring()) : std::string())));
+    }
+
     // "Browse...": pick, check, remember. The page hears iso:ok|<path>|<text> or iso:bad|<path>|<text>.
     void browseGameFile()
     {
@@ -563,14 +675,33 @@ namespace
     }
 
     // The launcher's background music as a file:// URL, or empty when there is none.
-    std::wstring musicUrl()
+    // LOCAL PATCH: [launcher] music, chosen with Choose... (UTF-8 in launcher.ini; relative = from the game's folder).
+    fs::path chosenMusic()
     {
         const std::string configured = g_mine.get("launcher", "music", "");
-        if (!configured.empty())
-        {
-            const fs::path path = fs::path(configured).is_absolute() ? fs::path(configured) : g_root / configured;
-            return fs::exists(path) ? fileUrl(path) : std::wstring();
-        }
+        if (configured.empty())
+            return {};
+        const fs::path path(widen(configured));
+        return path.is_absolute() ? path : g_root / path;
+    }
+
+    // The name the launcher shows for the music: the chosen file's, or "Original theme".
+    std::string musicName()
+    {
+        const fs::path chosen = chosenMusic();
+        std::error_code ec;
+        if (!chosen.empty() && fs::exists(chosen, ec))
+            return narrow(chosen.stem().wstring());
+        return "Original theme";
+    }
+
+    std::wstring musicUrl()
+    {
+        const fs::path chosen = chosenMusic();
+        std::error_code ec;
+        // A chosen file that has gone (moved, deleted): the original theme instead of silence.
+        if (!chosen.empty() && fs::exists(chosen, ec))
+            return fileUrl(chosen);
         for (const char *ext : {".mp3", ".ogg", ".m4a", ".wav", ".flac", ".opus", ".webm"})
         {
             const fs::path path = g_root / "launcher_assets" / (std::string("music") + ext);
@@ -590,6 +721,17 @@ namespace
         // Launcher music: [launcher] music = <file>, else launcher_assets/music.(mp3|ogg|m4a|wav|flac|opus|webm).
         const std::wstring music = musicUrl();
         js << ",music:" << (music.empty() ? std::string("null") : jsonString(narrow(music)))
+           << ",musicName:" << jsonString(musicName())
+           << ",padKind:" << jsonString(launcher::pads::kind())
+           << ",version:" << jsonString([] {
+                  // LOCAL PATCH: the installed version (version.txt, what the updater compares), for the Feature Set page
+                  std::ifstream in(g_root / "version.txt");
+                  std::string v;
+                  std::getline(in, v);
+                  v.erase(std::remove_if(v.begin(), v.end(), [](unsigned char c) { return std::isspace(c) != 0; }), v.end());
+                  return v;
+              }())
+           << ",jukebox:" << jukeboxJson()
            << ",muted:" << (truthy(g_mine.get("launcher", "music_muted", "false")) ? "true" : "false")
            << ",iso:" << jsonString(g_mine.get("game", "iso", ""))
            << ",savesDir:" << jsonString(narrow(savesFolder().wstring()))
@@ -638,6 +780,21 @@ namespace
         fs::path runner = g_runner;
         if (!avx2)
         {
+            // LOCAL PATCH (smaller download): fetched once from the GitHub release (started at launcher start-up).
+            int percent = 0;
+            std::string fetchError;
+            const auto state = launcher::update::oldCpuBuild(g_root, &percent, &fetchError);
+            if (state == launcher::update::OldCpuBuild::Downloading)
+            {
+                error = "Getting the version of the game for your processor (one time only, about 19 MB): " +
+                        std::to_string(percent) + "%. Press Play again in a moment.";
+                return false;
+            }
+            if (state == launcher::update::OldCpuBuild::Failed)
+            {
+                error = fetchError;
+                return false;
+            }
             runner = g_runner.parent_path() / "Shinobi-SSE4.exe";
             if (!fs::exists(runner))
             {
@@ -810,6 +967,128 @@ namespace
         {
             g_mine.set("launcher", "music_muted", values["muted"] == "1" ? "true" : "false");
             g_mine.save((g_root / "launcher.ini").string());
+        }
+        else if (command == "hap")
+        {
+            // LOCAL PATCH: menu haptics (the page drives them: a thump per move, beads while the right stick scrolls),
+            // following the haptics switch and strength. kind: move | bead | tab | press | back; v: 0..100 (bead speed).
+            const std::string on = g_game.get("input", "haptics", "true");
+            if (on == "false" || on == "0" || on == "off")
+                return;
+            const float strength = std::clamp(std::atoi(g_game.get("input", "haptic_strength", "100").c_str()), 0, 100) / 100.0f;
+            const std::string kind = values["kind"];
+            const float speed = std::clamp(std::atoi(values["v"].c_str()), 0, 100) / 100.0f;
+            float left = 0.0f, right = 0.0f;
+            int ms = 20;
+            // Both actuators together, so every tap is felt in the centre of the pad as one thump (the actuators need
+            // ~40 ms and a strong level to be felt clearly in vibration-emulation mode).
+            if (kind == "move")
+                left = 0.95f, right = 1.0f, ms = 60;          // a good centred thump per move
+            else if (kind == "bead")
+                left = right = 0.75f + 0.25f * speed, ms = 45; // one clear bead (the page sends one every 0.35 s)
+            else if (kind == "tab")
+                left = 1.0f, right = 1.0f, ms = 80;           // a page turn: heavier and longer
+            else if (kind == "press")
+                left = 1.0f, right = 1.0f, ms = 65;           // a firm click
+            else if (kind == "back")
+                left = 0.80f, right = 0.80f, ms = 50;
+            else
+                return;
+            launcher::dualsense::tap(left * strength, right * strength, ms);
+        }
+        else if (command == "eudiscpick" || command == "eudiscclear")
+        {
+            // LOCAL PATCH: Languages. The player's Shinobi (Europe) disc image: French, German, Italian and Spanish are
+            // read from it by the game (ps2_lang_overlay.cpp); only its place is remembered ([language] eu_disc).
+            // The page hears eudisc:ok|<path>|<text>, eudisc:bad|<path>|<text> or eudisc:none.
+            if (command == "eudiscclear")
+            {
+                g_game.set("language", "eu_disc", "");
+                g_game.save((g_gameDir / "settings.ini").string());
+                post(L"eudisc:none");
+                return;
+            }
+            ComPtr<IFileOpenDialog> dialog;
+            if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
+                return;
+            const COMDLG_FILTERSPEC filters[] = {{L"PS2 disc images (*.iso, *.bin, *.img)", L"*.iso;*.bin;*.img"}, {L"All files", L"*.*"}};
+            dialog->SetFileTypes(2, filters);
+            dialog->SetTitle(L"Select your Shinobi (Europe) disc image");
+            DWORD options = 0;
+            dialog->GetOptions(&options);
+            dialog->SetOptions(options | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST | FOS_FORCEFILESYSTEM);
+            ComPtr<IShellItem> item;
+            PWSTR picked = nullptr;
+            if (FAILED(dialog->Show(g_hwnd)) || FAILED(dialog->GetResult(&item)) ||
+                FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &picked)) || !picked)
+                return;
+            const fs::path path(picked);
+            CoTaskMemFree(picked);
+            const launcher::iso::Check check = launcher::iso::check(path, "SCES_514.28");
+            std::string text;
+            if (check.ok)
+            {
+                g_game.set("language", "eu_disc", narrow(path.wstring()));
+                g_game.save((g_gameDir / "settings.ini").string());
+                text = "Shinobi (Europe) found: French, German, Italian and Spanish are ready.";
+            }
+            else if (check.bootFile.empty())
+                text = check.message;
+            else if (check.bootFile == "SLUS_204.59")
+                text = "That is your US disc. Choose your Shinobi (Europe) disc image (SCES_514.28).";
+            else
+                text = "This is a different disc (" + check.bootFile + "). Languages need Shinobi (Europe), SCES_514.28.";
+            post(widen(std::string(check.ok ? "eudisc:ok|" : "eudisc:bad|") + narrow(path.wstring()) + "|" + text));
+        }
+        else if (command == "reload")
+        {
+            // LOCAL PATCH: the Refresh button. The page starts again (loading screen, intro) with its settings read
+            // from disk now: a fresh copy of window.__launcherInit is added (it runs after the first one, so it wins;
+            // the previous refresh's copy is removed), then the page reloads. Not while the game runs: the page would
+            // forget the game is running.
+            if (g_gameProcess)
+                post(L"juke-error:Close the game first, then refresh the launcher.");
+            else if (g_view)
+            {
+                static std::wstring s_refreshScript;
+                if (!s_refreshScript.empty())
+                    g_view->RemoveScriptToExecuteOnDocumentCreated(s_refreshScript.c_str());
+                g_view->AddScriptToExecuteOnDocumentCreated(
+                    widen(initScript()).c_str(),
+                    Callback<ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler>(
+                        [](HRESULT, LPCWSTR id) -> HRESULT {
+                            if (id)
+                                s_refreshScript = id;
+                            if (g_view)
+                                g_view->Reload();
+                            return S_OK;
+                        })
+                        .Get());
+            }
+        }
+        else if (command == "jukepick" || command == "jukedefault")
+            jukeboxSet(values["key"], command == "jukepick");
+        else if (command == "jukefolder")
+        {
+            std::error_code ec;
+            fs::create_directories(g_root / "jukebox", ec);
+            ShellExecuteW(nullptr, L"open", (g_root / "jukebox").wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        }
+        else if (command == "musicpick" || command == "musicdefault")
+        {
+            // LOCAL PATCH: the launcher's music. Choose... keeps the file where it is and remembers its place in
+            // launcher.ini (which updates never replace); Default goes back to launcher_assets/music.*.
+            if (command == "musicpick")
+            {
+                const fs::path path = browseForMusic();
+                if (path.empty())
+                    return;
+                g_mine.set("launcher", "music", narrow(path.wstring()));
+            }
+            else
+                g_mine.set("launcher", "music", "");
+            g_mine.save((g_root / "launcher.ini").string());
+            post(L"music:" + musicUrl() + L"|" + widen(musicName()));
         }
         else if (command == "minimize")
             ShowWindow(g_hwnd, SW_MINIMIZE);
@@ -1105,6 +1384,19 @@ namespace
                 return 4;
             }
         }
+        // LOCAL PATCH: no AVX2 -> the game program for older processors, fetched once (waited for here).
+        if (!IsProcessorFeaturePresent(40 /* PF_AVX2_INSTRUCTIONS_AVAILABLE */) || _wgetenv(L"SHINOBI_FORCE_SSE4"))
+        {
+            int percent = 0;
+            std::string fetchError;
+            while (launcher::update::oldCpuBuild(g_root, &percent, &fetchError) == launcher::update::OldCpuBuild::Downloading)
+                Sleep(200);
+            if (!fetchError.empty())
+            {
+                MessageBoxW(nullptr, widen(fetchError).c_str(), L"Shinobi", MB_ICONERROR);
+                return 6;
+            }
+        }
         return playAndWait() < 0 ? 5 : 0;
     }
 
@@ -1305,6 +1597,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     // LOCAL PATCH: updates from the project's GitHub releases (launcher_update.cpp). The check waits a moment so the page
     // is up to receive its answer.
     launcher::update::cleanup(g_root);
+    // LOCAL PATCH: a PC without AVX2 starts fetching its game program at once, so it is there by the time Play is pressed.
+    if (g_shotPath.empty() &&
+        (!IsProcessorFeaturePresent(40 /* PF_AVX2_INSTRUCTIONS_AVAILABLE */) || _wgetenv(L"SHINOBI_FORCE_SSE4")))
+        launcher::update::oldCpuBuild(g_root);
     if (g_shotPath.empty())
         launcher::update::startCheck(g_root, [](const std::wstring &message) {
             Sleep(3000);
@@ -1365,21 +1661,40 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     wc.hIconSm = wc.hIcon;
     RegisterClassExW(&wc);
 
-    // The page is 1000 x 640 CSS pixels; the window is that at the monitor's scale.
+    // The page is 1000 x 640 CSS pixels and scales to fit the window (fitPage). LOCAL PATCH: it opens large, 85% of the
+    // screen's height (or width, whichever fits) at the page's shape, centred; never smaller than the page at the
+    // monitor's scale.
     const UINT dpi = GetDpiForSystem();
-    const int w = MulDiv(kPageWidth, static_cast<int>(dpi), 96);
-    const int h = MulDiv(kPageHeight, static_cast<int>(dpi), 96);
     RECT work{};
     SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    const int workW = work.right - work.left, workH = work.bottom - work.top;
+    int w = MulDiv(kPageWidth, static_cast<int>(dpi), 96);
+    int h = MulDiv(kPageHeight, static_cast<int>(dpi), 96);
+    {
+        int bigH = workH * 85 / 100;
+        int bigW = MulDiv(bigH, kPageWidth, kPageHeight);
+        if (bigW > workW * 90 / 100)
+        {
+            bigW = workW * 90 / 100;
+            bigH = MulDiv(bigW, kPageHeight, kPageWidth);
+        }
+        if (bigW > w)
+        {
+            w = bigW;
+            h = bigH;
+        }
+    }
     g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Shinobi (PS2 Recom) Launcher - by TheRealAfsan",
                              WS_OVERLAPPEDWINDOW, work.left + (work.right - work.left - w) / 2,
                              work.top + (work.bottom - work.top - h) / 2, w, h, nullptr, nullptr, instance, nullptr);
     const int corner = 2; // DWMWCP_ROUND (Windows 11)
     DwmSetWindowAttribute(g_hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &corner, sizeof(corner));
-    ShowWindow(g_hwnd, g_shotPath.empty() ? show : SW_SHOWNOACTIVATE);
+    // LOCAL PATCH: opens maximised (windowed, filling the screen); Restore gives the large centred window above.
+    ShowWindow(g_hwnd, g_shotPath.empty() ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE);
     UpdateWindow(g_hwnd);
     createWebView();
     launcher::dualsense::start([](const std::wstring &m) { postFromThread(m); });
+    launcher::pads::watch([](const std::wstring &m) { postFromThread(m); }); // LOCAL PATCH: L1 / LB / L on the page
 
     MSG message;
     while (GetMessageW(&message, nullptr, 0, 0))
