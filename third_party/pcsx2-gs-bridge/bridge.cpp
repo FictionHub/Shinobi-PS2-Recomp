@@ -21,6 +21,9 @@
 #include "pcsx2/GS.h"
 #include "pcsx2/GS/GSPerfMon.h"
 #include "pcsx2/GS/Renderers/Common/GSDevice.h"
+#ifdef ENABLE_VULKAN
+#include "pcsx2/GS/Renderers/Vulkan/VKShaderCache.h" // LOCAL PATCH: the pipeline cache saved while playing
+#endif
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/Host.h"
 #include "pcsx2/ImGui/ImGuiManager.h"
@@ -305,6 +308,14 @@ bool InitializePcsx2BaseSettings(std::string& error)
     // slot to the verified immutable package before any PCSX2 subsystem can
     // resolve fonts or shaders through GetOverridableResourcePath().
     EmuFolders::UserResources = EmuFolders::Resources;
+    // LOCAL PATCH (Shinobi): the shader / pipeline caches in a folder of the game's own (RRV_PCSX2_GS_CACHE_DIR, the
+    // game passes game/shadercache) instead of Documents/PCSX2/cache, which a real PCSX2 install also uses: each of
+    // them threw the other's caches away (a different build), so the shaders were compiled again on every start.
+    if (const char* cache = std::getenv("RRV_PCSX2_GS_CACHE_DIR"); cache && cache[0] != '\0')
+    {
+        EmuFolders::Cache = Path::Canonicalize(cache);
+        FileSystem::EnsureDirectoryExists(EmuFolders::Cache.c_str(), true);
+    }
 
     const char* hardware_error = nullptr;
     if (!VMManager::PerformEarlyHardwareChecks(&hardware_error))
@@ -3654,6 +3665,22 @@ extern "C" int rrv_pcsx2_gs_bridge_vsync(
         bridge->vsync_from_field = 0;
     }
     GSvsync(pcsx2_field, VsyncRegistersWritten());
+#ifdef ENABLE_VULKAN
+    // LOCAL PATCH (Shinobi): PCSX2 writes the Vulkan pipeline cache only when the renderer closes, and the game often
+    // ends without that (it ends its process when the GS thread will not stop), so the file stayed empty and every
+    // start built all pipelines again (hitches, long black screens on the first scenes). Saved every 30 s instead;
+    // FlushPipelineCache writes nothing unless new pipelines were built.
+    {
+        static std::chrono::steady_clock::time_point s_next_pipeline_flush{};
+        const auto now = std::chrono::steady_clock::now();
+        if (now >= s_next_pipeline_flush)
+        {
+            s_next_pipeline_flush = now + std::chrono::seconds(30);
+            if (g_vulkan_shader_cache)
+                g_vulkan_shader_cache->FlushPipelineCache();
+        }
+    }
+#endif
     if (bridge->dof_log)
     {
         // The draws of this field have been flushed by GSvsync.

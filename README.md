@@ -2,7 +2,9 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
-**Latest: v0.5.3.** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
+**v0.5.4:** picture centred (no more black bar at the bottom), steadier frame pacing at high frame rates, a game volume setting, the streamed-audio fix on by default (true stereo music, thanks to LgSetzeR's write-up in issue #2), and shaders built once instead of on every start.
+
+**v0.5.3:** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
 
 **v0.5 is out:** Frame Generation (360 FPS+), Latency Reduction, IMAX Mode, a Final Boss Balance mode, Infinite Health, 8 new mods on the F keys, Proton / Linux / Steam Deck (beta), a new overlay and 15+ fixes. 🔥
 

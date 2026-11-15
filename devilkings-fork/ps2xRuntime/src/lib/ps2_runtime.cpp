@@ -1601,6 +1601,58 @@ static uint32_t FpsTargetSetting()
     return s_target;
 }
 
+// LOCAL PATCH (issue #8, picture pushed up): Shinobi draws its picture at the top of a 448-line frame and leaves the
+// bottom ~18 lines black (a TV's overscan hid that). The black rows at the bottom of each new picture are measured,
+// and once the same amount has held for 30 pictures the picture is moved down by half of it, so it sits centred.
+// Only black rows ever go past the screen edge; a picture that uses its full height gets no shift. A picture whose
+// top row is black too (a dark scene, a fade) changes nothing. PS2X_CENTRE_PICTURE=0 turns it off.
+static std::atomic<float> g_ps2CentreShift{0.0f}; // fraction of the picture's height to move it down by
+static int g_ps2PaceFps = 0;                        // the window loop's frame cap (0 = none), see ps2xPaceFrame
+void ps2xPaceFrame(int fps);                        // ps2_pacing.cpp
+
+static void NoteBlackBottom(const uint8_t *pixels, uint32_t width, uint32_t height)
+{
+    static const bool s_on = [] { const char *e = std::getenv("PS2X_CENTRE_PICTURE"); return !(e && e[0] == '0'); }();
+    if (!s_on || !pixels || width < 16u || height < 64u)
+        return;
+    const uint32_t step = std::max<uint32_t>(1u, width / 128u);
+    const auto rowBlack = [&](uint32_t y) {
+        const uint8_t *row = pixels + static_cast<size_t>(y) * width * 4u;
+        for (uint32_t x = 0; x < width; x += step)
+        {
+            const uint8_t *p = row + static_cast<size_t>(x) * 4u;
+            if (p[0] > 10u || p[1] > 10u || p[2] > 10u)
+                return false;
+        }
+        return true;
+    };
+    if (rowBlack(0u))
+        return;
+    const uint32_t limit = height / 12u; // a band of at most ~8%
+    uint32_t black = 0u;
+    while (black < limit && rowBlack(height - 1u - black))
+        ++black;
+    if (black >= limit)
+        return; // a dark bottom, not the empty band
+    static float s_candidate = -1.0f;
+    static int s_seen = 0;
+    const float fraction = static_cast<float>(black) / static_cast<float>(height);
+    if (std::fabs(fraction - s_candidate) < 0.004f)
+    {
+        if (++s_seen == 30)
+        {
+            g_ps2CentreShift.store(fraction * 0.5f, std::memory_order_relaxed);
+            std::fprintf(stderr, "[picture] %u of %u bottom rows black: picture moved down %.1f%%\n", black, height,
+                         fraction * 50.0f);
+        }
+    }
+    else
+    {
+        s_candidate = fraction;
+        s_seen = 0;
+    }
+}
+
 static void UploadVulkanFrame(Texture2D &tex, uint64_t currentTick, uint32_t &outWidth, uint32_t &outHeight)
 {
     static std::vector<uint8_t> s_frame;
@@ -1654,6 +1706,7 @@ static void UploadVulkanFrame(Texture2D &tex, uint64_t currentTick, uint32_t &ou
         s_width = width;
         s_height = height;
         DumpPresentedFrame(currentTick, pixels, width, height, width * 4u, 0u);
+        NoteBlackBottom(pixels, width, height); // LOCAL PATCH: issue #8, the picture centred
     }
     outWidth = s_width != 0u ? s_width : FB_WIDTH;
     outHeight = s_height != 0u ? s_height : DEFAULT_DISPLAY_HEIGHT;
@@ -4640,7 +4693,10 @@ void PS2Runtime::run()
             }
             if (cap != s_cap || monitorHz != s_capMonitor)
             {
-                SetTargetFPS(cap);
+                // LOCAL PATCH (issue #7): raylib's limiter off; ps2xPaceFrame (ps2_pacing.cpp) keeps the beat after
+                // each EndDrawing with a high-resolution timer, so high frame-rate caps stay flat.
+                SetTargetFPS(0);
+                g_ps2PaceFps = cap;
                 s_cap = cap;
                 s_capMonitor = monitorHz;
             }
@@ -4674,7 +4730,7 @@ void PS2Runtime::run()
         const Rectangle srcRect{0.0f, 0.0f, srcWidth, srcHeight};
         const Rectangle dstRect{
             (screenWidth - dstWidth) * 0.5f,
-            (screenHeight - dstHeight) * 0.5f,
+            (screenHeight - dstHeight) * 0.5f + g_ps2CentreShift.load(std::memory_order_relaxed) * dstHeight, // issue #8
             dstWidth,
             dstHeight};
         presentation.drawFrame(shownTex, srcRect, dstRect);
@@ -4749,6 +4805,7 @@ void PS2Runtime::run()
                 glFinish();
         }
 #endif
+        ps2xPaceFrame(g_ps2PaceFps); // LOCAL PATCH (issue #7): the frame cap, on a high-resolution timer
         PollMarkHotkey(m_eeScheduler ? m_eeScheduler->currentVSyncTick() : 0u);
         // LOCAL PATCH: Alt+Enter or F11 switches between the chosen full-screen mode (fullscreen / borderless) and a normal,
         // resizable window, at any time (presentation.apply does the switch next frame). In a window the usual minimise /

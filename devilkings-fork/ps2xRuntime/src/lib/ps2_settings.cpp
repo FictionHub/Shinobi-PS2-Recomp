@@ -626,7 +626,7 @@ namespace ps2x::settings
             add({"performance", "show_fps", "Mostrar FPS", "Contador de quadros por segundo no canto da tela.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // Áudio
-            add({"audio", "volume", "Volume geral", "Volume de saída do jogo.", Kind::Number, "100", nullptr, {}, {}, 0,
+            add({"audio", "volume", "Volume", "The game's overall volume (music, voices and effects), 0 to 100.", Kind::Number, "100", nullptr, {}, {}, 0,
                  100, nullptr, true});
             {
                 // LOCAL PATCH: PCSX2's SPU2 core (default) or the runtime's own older sound model (iop_spu2.cpp).

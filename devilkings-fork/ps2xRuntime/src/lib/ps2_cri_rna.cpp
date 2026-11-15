@@ -254,9 +254,10 @@ namespace
 // At start-up, after the game's functions are registered (ps2_runtime.cpp loadELF).
 void ps2xCriRnaInstall(PS2Runtime &runtime)
 {
-    // Opt-in until it has been checked on every screen (title music): PS2X_CRI_RNA_HLE=1.
+    // On by default (v0.5.4; GitHub issue #2, cause and method confirmed by LgSetzeR's write-up). PS2X_CRI_RNA_HLE=0
+    // goes back to the sound chip path (with audio.stereo_repair's left-channel copy).
     const char *on = std::getenv("PS2X_CRI_RNA_HLE");
-    if (!on || on[0] != '1')
+    if (on && on[0] == '0')
         return;
     if (!runtime.hasFunction(kExecHndl) || !runtime.hasFunction(kGetNumData) || !runtime.hasFunction(kGetNumRoom))
         return;

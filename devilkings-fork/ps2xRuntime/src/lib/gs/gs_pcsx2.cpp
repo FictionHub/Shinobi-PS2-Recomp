@@ -510,6 +510,19 @@ namespace ps2x::pcsx2gs
             {
                 if (!std::getenv("RRV_PCSX2_GS_TEXTURE_SERIAL"))
                     _putenv_s("RRV_PCSX2_GS_TEXTURE_SERIAL", "SLUS-20459");
+                // LOCAL PATCH: PCSX2's shader / pipeline caches in game/shadercache (the game runs in game/), not in
+                // Documents/PCSX2/cache, which a real PCSX2 install shares and keeps replacing.
+                if (!std::getenv("RRV_PCSX2_GS_CACHE_DIR"))
+                {
+                    std::error_code cacheEc;
+                    const std::filesystem::path cacheDir = std::filesystem::absolute("shadercache", cacheEc).lexically_normal();
+                    if (!cacheEc)
+                    {
+                        const std::u8string utf8 = cacheDir.u8string();
+                        _putenv_s("RRV_PCSX2_GS_CACHE_DIR",
+                                  std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size()).c_str());
+                    }
+                }
                 if (!std::getenv("RRV_PCSX2_GS_TEXTURES_DIR"))
                 {
                     std::error_code ec;

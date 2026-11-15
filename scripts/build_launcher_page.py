@@ -458,6 +458,7 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
     _segrow('Frame Generation Target', 'fgtOpts', 6, 'Pictures a second with frame generation. Auto = just under your screen&#39;s refresh.') +
     _chkrow('Low Latency (F6)', 'lowlat', 'toggleLowlat', 'Stops the graphics driver queueing frames: 16-33 ms less delay, like NVIDIA Reflex.') +
     _chkrow('Performance Overlay (F2)', 'ovl', 'toggleOvl', 'FPS, frame time, 1% lows, CPU, GPU, RAM and VRAM in the top-left corner.') +
+    _segrow('Game Volume', 'volOpts', 6, 'Music, voices and effects together.') +
     '        </sc-if>\n        <sc-if value="{{tabController}}"')
 
 # ---- LOCAL PATCH: invert camera switches in Configure Controller (Gamepad view) ----
@@ -1458,13 +1459,14 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('infhealth', s.infhealth ? 1 : 0); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['controller', 'Controls']]""")
 L("""      tabController: s.tab === 'controller',""",
   """      tabController: s.tab === 'controller',
       tabEffects: s.tab === 'effects',
       tabPerf: s.tab === 'perf',
+      volOpts: [['100', '100%'], ['80', '80%'], ['60', '60%'], ['40', '40%'], ['20', '20%'], ['0', 'Mute']].map((o) => ({ name: o[1], on: String(s.vol || '100') === o[0], cls: String(s.vol || '100') === o[0] ? 'on' : '', pick: () => this.setState({ vol: o[0] }) })),
       fgtOpts: [['monitor', 'Auto'], ['120', '120'], ['144', '144'], ['240', '240'], ['360', '360'], ['unlimited', 'Max']].map((o) => ({ name: o[1], on: (s.fgt || 'monitor') === o[0], cls: (s.fgt || 'monitor') === o[0] ? 'on' : '', pick: () => this.setState({ fgt: o[0] }) })),
       blendOpts: [['minimum', 'Min'], ['basic', 'Basic'], ['medium', 'Medium'], ['high', 'High']].map((o) => ({ name: o[1], on: (s.blend || 'basic') === o[0], cls: (s.blend || 'basic') === o[0] ? 'on' : '', pick: () => this.setState({ blend: o[0] }) })),
       texfOpts: [['ps2', 'As on PS2'], ['bilinear', 'Bilinear']].map((o) => ({ name: o[1], on: (s.texf || 'ps2') === o[0], cls: (s.texf || 'ps2') === o[0] ? 'on' : '', pick: () => this.setState({ texf: o[0] }) })),
@@ -1499,7 +1501,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, unlockall: !!s.unlockall, fairboss: !!s.fairboss, infhealth: !!s.infhealth, hdtex: s.hdtex !== false, dumptex: !!s.dumptex, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, unlockall: !!s.unlockall, fairboss: !!s.fairboss, infhealth: !!s.infhealth, hdtex: s.hdtex !== false, dumptex: !!s.dumptex, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', vol: s.vol || '100', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
@@ -1570,7 +1572,7 @@ L("""  navTab(d) {""",
 
 # Resolution: the GPU warning as a notice when 4K / 8K is picked (it no longer fits in the label).
 L("""pick: set({ res: r[0], resOpen: false })""",
-  """pick: () => { this.setState({ res: r[0], resOpen: false }); if (r[0] === '4K') this.toastMsg('4K needs a strong graphics card'); else if (r[0] === '8K') this.toastMsg('8K is experimental: high-end graphics cards only'); }""")
+  """pick: () => { this.setState({ res: r[0], resOpen: false }); if (r[0] === '4K') this.toastMsg('4K runs well on most graphics cards from the last few years'); else if (r[0] === '8K') this.toastMsg('8K is experimental: high-end graphics cards only'); }""")
 
 # Mod Menu: the game's own mods first (their own settings keys), then the rest.
 L("""    const modRows = MODS.map((m) => ({""",

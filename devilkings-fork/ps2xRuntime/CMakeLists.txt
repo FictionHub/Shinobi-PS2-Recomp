@@ -413,6 +413,7 @@ add_library(ps2_runtime STATIC
     src/lib/gs/gs_bars.cpp
     src/lib/ps2_unlocks.cpp
     src/lib/ps2_fair_boss.cpp
+    src/lib/ps2_pacing.cpp
     src/lib/ps2_scarf_collide.cpp
     src/lib/ps2_framegen.cpp
     src/lib/ps2_cri_rna.cpp
