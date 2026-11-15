@@ -2,7 +2,7 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
-**v0.6.0:** a Jukebox (launcher > Jukebox: replace any of the game's 30 music tracks with your own mp3, ogg or wav, kept through updates), WASD movement and Shift / Ctrl bindings on the keyboard, IMAX mode now covers the story cutscenes too (the movie fills a 16:9 screen at its real shape instead of being squashed between bars), picture centred (no more black bar at the bottom), steadier frame pacing at high frame rates, a game volume setting, your own launcher music (FPS tab > Launcher Music, kept through updates), the streamed-audio fix on by default (true stereo music, thanks to LgSetzeR's write-up in issue #2), shaders built once instead of on every start, and game folders with any characters in their name (e.g. C:\Users\José) now work.
+**v0.6.0 is out:** Languages (Japanese, French, German, Italian, Spanish), a Jukebox for all 30 music tracks, IMAX story movies, true 1:1 mouse aiming, a rebuilt launcher and half the download (67 MB to 35 MB). **[Download v0.6.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack 1](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 235 textures, the HUD, menus and Stage 1, growing every update) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.6.0)
 
 **v0.5.3:** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
 
@@ -377,6 +377,12 @@ Saves are kept in the `saves` folder next to the launcher, apart from the game f
 
 The PCSX2 sound chip emulation is the default. The old sound code is still there as the "Legacy sound chip" option. `audio.stereo_repair` in `game/settings.ini` plays the clean left channel in both ears (`copy_left`, default; Shinobi never had surround sound). Set it to `stereo` to turn the repair off.
 
+## Downloads
+
+- **The game:** [latest release](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest) (`Shinobi-PS2-Recomp-v<version>-Windows-x64.zip`). The launcher updates itself after that.
+- **HD Texture Pack (optional):** [Shinobi-PS2-HD-Texture-Pack-1](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest). Unzip it into the game folder; Shift+F5 in game compares HD and original. Also works in PCSX2.
+- **Processors without AVX2:** nothing to do, the launcher fetches `Shinobi-SSE4-v<version>.pack` from the same release by itself (offline: put it in `bin` as `Shinobi-SSE4.pack`).
+
 ## Previous versions
 
 The v0.3 patch notes are in [the README as it was at v0.3](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/blob/c059256/README.md).
@@ -392,6 +398,7 @@ The source is GPL-3.0 (see `LICENSE`). The source repository does not contain th
 - **PCSX2** (graphics and sound code, GPL): the PCSX2 Team, <https://pcsx2.net>
 - **raylib:** Ramon Santamaria and contributors, <https://www.raylib.com>
 - **Microsoft Edge WebView2** shows the launcher page
+- **Real-ESRGAN** (the HD Texture Pack's upscaling, BSD-3-Clause): Xintao Wang and contributors, <https://github.com/xinntao/Real-ESRGAN>
 - **StPageFlip** (page-turning in the manual, MIT): Nodlik, <https://github.com/Nodlik/StPageFlip>
 - **DualSense Bluetooth haptics:** the report format was worked out by [SAxense](https://github.com/egormanga/SAxense) and documented by [dualsense-bt-haptics](https://github.com/awalol/dualsense-bt-haptics); this port's implementation is its own
 
