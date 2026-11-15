@@ -63,7 +63,7 @@ Still to come: boss gauges, the remaining icons and the menus, as we get to them
 
 1. In the launcher's Mod Menu, switch on **Save textures (pack makers)**, play until the HUD is on screen, then switch it off again.
 2. Upscale the saved HUD textures with [`scripts/ps2_upscale.py`](scripts/ps2_upscale.py) (Real-ESRGAN on your graphics card). It handles the PS2's transparency properly, so there are no fringes or halos.
-3. The results go into `textures\SLUS-20459eplacements`, and the HUD is HD the next time it appears.
+3. The results go into `textures/SLUS-20459/replacements`, and the HUD is HD the next time it appears.
 
 [`textures/README.txt`](textures/README.txt) has the details. Packs made for PCSX2 (Shinobi USA, SLUS-20459) work too.
 
