@@ -26,6 +26,9 @@
 
 namespace fs = std::filesystem;
 
+// launcher_webview.cpp: unzip with bin's zlib1.dll (when tar.exe is missing, e.g. Wine/Proton).
+bool launcherUnzipWithZlib(const fs::path &zip, const fs::path &folder, const fs::path &zlibDll);
+
 namespace launcher::update
 {
     namespace
@@ -79,7 +82,8 @@ namespace launcher::update
 
         // GET a URL; with `file` the body goes there (progress 0..100 reported), else into `body`. Redirects are followed
         // (GitHub's download links redirect to its file servers).
-        bool get(const std::wstring &url, std::string *body, const fs::path *file, const std::function<void(int)> &progress)
+        bool get(const std::wstring &url, std::string *body, const fs::path *file, const std::function<void(int)> &progress,
+                 bool api = false)
         {
             URL_COMPONENTS parts{};
             parts.dwStructSize = sizeof(parts);
@@ -100,8 +104,10 @@ namespace launcher::update
                                                              parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)
                                         : nullptr;
             bool ok = false;
-            if (request && WinHttpSendRequest(request, L"Accept: application/vnd.github+json\r\n", static_cast<DWORD>(-1),
-                                              WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+            // The GitHub API wants its own Accept header; a file download gets none (the file server may refuse it).
+            if (request &&
+                WinHttpSendRequest(request, api ? L"Accept: application/vnd.github+json\r\n" : WINHTTP_NO_ADDITIONAL_HEADERS,
+                                   api ? static_cast<DWORD>(-1) : 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
                 WinHttpReceiveResponse(request, nullptr))
             {
                 DWORD status = 0, size = sizeof(status);
@@ -188,7 +194,7 @@ namespace launcher::update
                 return;
             const std::string repo = m[1].str();
             std::string json;
-            if (!get(widen("https://api.github.com/repos/" + repo + "/releases/latest"), &json, nullptr, nullptr))
+            if (!get(widen("https://api.github.com/repos/" + repo + "/releases/latest"), &json, nullptr, nullptr, true))
                 return;
             std::smatch tag, asset;
             if (!std::regex_search(json, tag, std::regex("\"tag_name\"\\s*:\\s*\"([^\"]+)\"")))
@@ -220,8 +226,11 @@ namespace launcher::update
             }
             wchar_t system[MAX_PATH] = {};
             GetSystemDirectoryW(system, MAX_PATH);
-            if (run(L"\"" + std::wstring(system) + L"\\tar.exe\" -xf \"" + zip.wstring() + L"\" -C \"" + (work / "x").wstring() +
-                    L"\"") != 0)
+            // tar.exe first (Windows 10 1803+); without it (Wine/Proton) or if it fails, bin's zlib1.dll.
+            const bool untarred = !_wgetenv(L"SHINOBI_LAUNCHER_NO_TAR") &&
+                                  run(L"\"" + std::wstring(system) + L"\\tar.exe\" -xf \"" + zip.wstring() + L"\" -C \"" +
+                                      (work / "x").wstring() + L"\"") == 0;
+            if (!untarred && !launcherUnzipWithZlib(zip, work / "x", root / "bin" / "zlib1.dll"))
             {
                 post(L"update-error:The update could not be unpacked.");
                 return;

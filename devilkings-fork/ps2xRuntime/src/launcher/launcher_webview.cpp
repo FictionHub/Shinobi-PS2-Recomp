@@ -131,7 +131,7 @@ namespace
 
     // Unzips `zip` into `folder` with the zlib1.dll shipped in bin, for when Windows' tar.exe is not there (Wine/Proton
     // has none). Stored and deflated entries; every file's CRC is checked and it is written under a temporary name first.
-    bool unzipWithZlib(const fs::path &zip, const fs::path &folder)
+    bool unzipWithZlib(const fs::path &zip, const fs::path &folder, const fs::path &zlibDll = {})
     {
         struct ZStream
         {
@@ -145,7 +145,7 @@ namespace
         using InflateEnd = int (*)(ZStream *);
         using Version = const char *(*)();
         using Crc32 = unsigned long (*)(unsigned long, const unsigned char *, unsigned);
-        HMODULE z = LoadLibraryW((folder / "zlib1.dll").wstring().c_str());
+        HMODULE z = LoadLibraryW((zlibDll.empty() ? folder / "zlib1.dll" : zlibDll).wstring().c_str());
         if (!z)
             return false;
         const auto init = reinterpret_cast<InflateInit2>(GetProcAddress(z, "inflateInit2_"));
@@ -324,7 +324,8 @@ namespace
         info.cb = sizeof(info);
         PROCESS_INFORMATION process{};
         DWORD code = 1;
-        if (CreateProcessW(nullptr, unpack.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &info, &process))
+        if (!_wgetenv(L"SHINOBI_LAUNCHER_NO_TAR") && // test hook: take the Wine/Proton path (no tar.exe) on Windows
+            CreateProcessW(nullptr, unpack.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &info, &process))
         {
             WaitForSingleObject(process.hProcess, 180000);
             GetExitCodeProcess(process.hProcess, &code);
@@ -709,6 +710,22 @@ namespace
 
     // ------------------------------------------------------------------ messages from the page
 
+    // After an update: start the new launcher and close this one.
+    void restartLauncher()
+    {
+        const std::wstring exe = (g_root / "Shinobi Launcher.exe").wstring();
+        std::wstring cmd = L"\"" + exe + L"\"";
+        STARTUPINFOW info{};
+        info.cb = sizeof(info);
+        PROCESS_INFORMATION process{};
+        if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, g_root.wstring().c_str(), &info, &process))
+        {
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+        }
+        PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
+    }
+
     void onMessage(const std::string &message)
     {
         std::istringstream in(message);
@@ -775,20 +792,7 @@ namespace
             else if (url.rfind("https://github.com/", 0) != 0 || url.find("/releases/download/") == std::string::npos)
                 post(L"update-error:That is not a release download.");
             else
-                launcher::update::install(g_root, url, [](const std::wstring &m) { postFromThread(m); }, []() {
-                    const std::wstring exe = (g_root / "Shinobi Launcher.exe").wstring();
-                    std::wstring cmd = L"\"" + exe + L"\"";
-                    STARTUPINFOW info{};
-                    info.cb = sizeof(info);
-                    PROCESS_INFORMATION process{};
-                    if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, g_root.wstring().c_str(), &info,
-                                       &process))
-                    {
-                        CloseHandle(process.hThread);
-                        CloseHandle(process.hProcess);
-                    }
-                    PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
-                });
+                launcher::update::install(g_root, url, [](const std::wstring &m) { postFromThread(m); }, restartLauncher);
         }
         else if (command == "close")
             PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
@@ -1273,6 +1277,29 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         launcher::update::startCheck(g_root, [](const std::wstring &message) {
             Sleep(3000);
             postFromThread(message);
+            // Test hook: SHINOBI_LAUNCHER_AUTOUPDATE=<png path> installs the update at once (no click), and the restarted
+            // launcher saves a screenshot there and quits, so a whole update can be checked unattended on a copy.
+            if (const wchar_t *shot = _wgetenv(L"SHINOBI_LAUNCHER_AUTOUPDATE"))
+            {
+                const std::wstring shotPath = shot;
+                const std::string m = narrow(message);
+                const size_t bar = m.find('|');
+                if (m.rfind("update:", 0) == 0 && bar != std::string::npos)
+                {
+                    std::fprintf(stderr, "[update] test hook: installing %s\n", m.substr(7, bar - 7).c_str());
+                    launcher::update::install(
+                        g_root, m.substr(bar + 1),
+                        [](const std::wstring &p) {
+                            std::fprintf(stderr, "[update] %s\n", narrow(p).c_str());
+                            postFromThread(p);
+                        },
+                        [shotPath]() {
+                            SetEnvironmentVariableW(L"SHINOBI_LAUNCHER_AUTOUPDATE", nullptr);
+                            SetEnvironmentVariableW(L"SHINOBI_LAUNCHER_SHOT", shotPath.c_str());
+                            restartLauncher();
+                        });
+                }
+            }
         });
 
     if (!fs::exists(g_page))
@@ -1343,4 +1370,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     }
     CoUninitialize();
     return 0;
+}
+
+// LOCAL PATCH: for launcher_update.cpp: unzip with bin's zlib1.dll when tar.exe is missing (Wine/Proton) or fails.
+bool launcherUnzipWithZlib(const std::filesystem::path &zip, const std::filesystem::path &folder,
+                           const std::filesystem::path &zlibDll)
+{
+    return unzipWithZlib(zip, folder, zlibDll);
 }
