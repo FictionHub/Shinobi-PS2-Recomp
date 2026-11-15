@@ -2,11 +2,7 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
-**v0.5.3:** Shift+F5 switches HD textures on and off while you play, and `scripts/ps2_upscale.py` makes HD packs with PS2 transparency handled properly.
-
-**v0.5.2:** HD texture packs (drop upscaled textures, like an HD HUD, into the `textures` folder; `textures/README.txt` explains how to make one), and a download 40% smaller (111 MB to 67 MB) with nothing taken out.
-
-**v0.5.1:** no more AVX2 requirement. The launcher picks the right build for your CPU by itself (any 64-bit CPU with SSE4.1, 2008+), and self-updates now work under Proton too.
+**Latest: v0.5.3.** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
 
 **v0.5 is out:** Frame Generation (360 FPS+), Latency Reduction, IMAX Mode, a Final Boss Balance mode, Infinite Health, 8 new mods on the F keys, Proton / Linux / Steam Deck (beta), a new overlay and 15+ fixes. 🔥
 
@@ -23,11 +19,11 @@
 
 **Or from GitHub:**
 
-1. Open **[Releases](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases)** and download **Shinobi-PS2-Recomp-v0.5.0-Windows-x64.zip**. Right-click it and choose **Extract All...** (any folder except Program Files).
+1. Open **[Releases](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases)** and download the newest **Shinobi-PS2-Recomp-v…-Windows-x64.zip** (67 MB). Right-click it and choose **Extract All...** (any folder except Program Files).
 2. Run **`Shinobi Launcher.exe`** (it is in the main folder you just unzipped).
 3. Press **Game File**, choose your own Shinobi (USA) disc image, press **Set up game files**, then **Play Game**.
 
-Coming from v0.4? Download v0.5 once and unzip it over your old folder (your saves, settings and game files are kept). From v0.5 on, the launcher updates itself: when a new version is out, an **Update** button appears in its title bar.
+Coming from v0.4? Download the newest release once and unzip it over your old folder (your saves, settings and game files are kept). From v0.5 on, the launcher updates itself: when a new version is out, an **Update** button appears in its title bar.
 
 Everything is in this one repository: the launcher, the game program and the source code.
 
@@ -44,6 +40,45 @@ Reddit: <https://www.reddit.com/user/Afsan23/>
 > **This repository does not contain the game.** No disc image, no game files and no game data. You need your own copy of Shinobi (PS2, USA, SLUS-20459), made into an image file from the disc you own.
 
 The game's own program is translated ("recompiled") to run natively on Windows. PCSX2's graphics (GS) and sound (SPU2) code is used for the parts that have to match the PS2 exactly.
+
+---
+
+## v0.5.3: HD textures, older CPUs and a smaller download
+
+### HD texture packs (Shift+F5) — the HD HUD is a work in progress
+
+The game can now load higher-resolution versions of its own textures (PCSX2's texture replacement, built into the recomp's graphics code). **Shift+F5** switches them on and off while you play, so you can see the difference straight away.
+
+We're upscaling the HUD a piece at a time, and more gets done with every update. Done so far:
+
+- the health gauge (frame, the "9", its red veins and the blue soul flames)
+- the magic scroll and its icons (fire, slash, lightning) and the counter digits
+- the kunai icons
+- the TATE kill orbs and their kanji
+- the lock-on circle
+
+Still to come: boss gauges, the remaining icons and the menus, as we get to them.
+
+**Why the HD textures aren't in the download:** they're made from the game's own artwork, and this project never ships anything from the game. So you build them from your own copy, which takes a few minutes:
+
+1. In the launcher's Mod Menu, switch on **Save textures (pack makers)**, play until the HUD is on screen, then switch it off again.
+2. Upscale the saved HUD textures with [`scripts/ps2_upscale.py`](scripts/ps2_upscale.py) (Real-ESRGAN on your graphics card). It handles the PS2's transparency properly, so there are no fringes or halos.
+3. The results go into `textures\SLUS-20459eplacements`, and the HUD is HD the next time it appears.
+
+[`textures/README.txt`](textures/README.txt) has the details. Packs made for PCSX2 (Shinobi USA, SLUS-20459) work too.
+
+### Runs on older CPUs
+
+No more AVX2 requirement: any 64-bit processor with SSE4.1 (2008 or newer, the same minimum as PCSX2) runs the game. It's still one launcher and one download. The launcher picks the faster AVX2 version or the compatible one for your CPU by itself.
+
+### 40% smaller download
+
+111 MB down to 67 MB, with nothing the game uses taken out. The two game programs are packed together with 7-Zip's compression, and DLLs that nothing ever loaded were removed.
+
+### Also
+
+- The launcher's self-update now works under Proton / Linux / Steam Deck too, and downloads are more reliable.
+- Fixed a crash on start-up when the game folder's name has certain characters (Japanese or accented letters).
 
 ---
 
@@ -268,6 +303,7 @@ I didn't want "rumble". I wanted it to feel like a modern PS5 game, so I built i
 | **Shift+F7** | No sword hunger |
 | **Shift+F8** | Remove scarf |
 | **Shift+F9** | Scarf body collision |
+| **Shift+F5** | HD textures on / off |
 | **F10** | Mouse camera on / off |
 | **Alt+Enter / F11** | Window or full screen |
 
