@@ -9,6 +9,7 @@
 
 namespace ps2x::iop::detail
 {
+    struct IopSaveStateAccess;
     class IopMemory;
 
     enum class IopThreadState : uint8_t
@@ -47,6 +48,7 @@ namespace ps2x::iop::detail
 
     class IopKernel
     {
+        friend struct IopSaveStateAccess; // LOCAL PATCH (save states): iop_emulator.cpp
     public:
         explicit IopKernel(IopMemory &memory) noexcept;
 

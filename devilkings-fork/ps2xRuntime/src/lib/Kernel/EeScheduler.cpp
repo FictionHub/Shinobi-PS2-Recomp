@@ -310,6 +310,8 @@ void EeScheduler::run()
 
     while (!m_stopRequested.load(std::memory_order_acquire))
     {
+        // LOCAL PATCH (save states): no guest code is on the host stack here (see reference/savestates.md).
+        ps2x::savestate::servicePending(m_runtime);
         processPendingEvents();
         if (m_stopRequested.load(std::memory_order_acquire))
         {
@@ -353,6 +355,7 @@ void EeScheduler::run()
         {
             auto completion = std::move(running->resumeCompletion);
             running->resumeCompletion = {};
+            running->resumeCompletionPc = 0u;
             try
             {
                 completion(running->activeContext());
@@ -1821,6 +1824,14 @@ uint32_t EeScheduler::setGsVSyncCallback(uint32_t callback, uint32_t gp, uint32_
         std::move(completion)});
 }
 
+[[noreturn]] void EeScheduler::waitVSyncResume(uint64_t afterTick, int fixedResult, uint32_t resumePc)
+{
+    EeWaitState wait{EeWaitReason::VSync, EeVSyncWait{afterTick, fixedResult},
+                     [resumePc](R5900Context &context) { context.pc = resumePc; }};
+    wait.resumePc = resumePc;
+    blockCurrent(std::move(wait));
+}
+
 void EeScheduler::completeVSync(uint64_t tick)
 {
     assertExecutor();
@@ -2138,6 +2149,7 @@ void EeScheduler::makeDormant(GuestThread &item)
     item.status = EeThreadStatus::Dormant;
     item.wait = {};
     item.resumeCompletion = {};
+    item.resumeCompletionPc = 0u;
     item.suspendCount = 0;
     item.wakeupCount = 0;
     item.invocations.clear();
@@ -2196,9 +2208,11 @@ void EeScheduler::makeReady(GuestThread &item, int result, bool interruptSafe)
 {
     blockNoteEnd(item.id);
     auto completion = std::move(item.wait.completion);
+    const uint32_t completionPc = item.wait.resumePc;
     item.wait = {};
     setReturnS32(&item.activeContext(), result);
     item.resumeCompletion = std::move(completion);
+    item.resumeCompletionPc = item.resumeCompletion ? completionPc : 0u;
     if (item.suspendCount != 0)
     {
         item.status = EeThreadStatus::Suspended;
@@ -2793,4 +2807,311 @@ void EeScheduler::publishIdleDebugContext()
     {
         publishDebugContext(selected->activeContext());
     }
+}
+
+// ---- LOCAL PATCH (save states, GitHub #16) ------------------------------------------------------------------------
+// Everything the EE kernel keeps outside guest memory. Written at the top of run() (no guest code on the host stack),
+// so a thread is fully described by its context: generated code resumes from context.pc.
+namespace
+{
+    static_assert(std::is_trivially_copyable_v<R5900Context>, "R5900Context must be plain data for save states");
+    static_assert(std::is_trivially_copyable_v<EeAlarm>);
+    static_assert(std::is_trivially_copyable_v<EeIrqHandler>);
+    static_assert(std::is_trivially_copyable_v<EeEvent>);
+
+    int64_t untilNs(std::chrono::steady_clock::time_point when, std::chrono::steady_clock::time_point now)
+    {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(when - now).count();
+    }
+    std::chrono::steady_clock::time_point fromNs(int64_t ns, std::chrono::steady_clock::time_point now)
+    {
+        return now + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::nanoseconds(ns));
+    }
+
+    void writeWait(ps2x::savestate::Writer &out, const EeWaitState &wait)
+    {
+        out.pod(static_cast<uint8_t>(wait.reason));
+        out.u32(static_cast<uint32_t>(wait.payload.index()));
+        if (const auto *s = std::get_if<EeSemaphoreWait>(&wait.payload))
+            out.pod(*s);
+        else if (const auto *e = std::get_if<EeEventFlagWait>(&wait.payload))
+            out.pod(*e);
+        else if (const auto *v = std::get_if<EeVSyncWait>(&wait.payload))
+            out.pod(*v);
+        else if (const auto *x = std::get_if<EeExternalWait>(&wait.payload))
+            out.pod(*x);
+        out.u32(wait.resumePc);
+    }
+
+    std::function<void(R5900Context &)> resumeAt(uint32_t pc)
+    {
+        if (pc == 0u)
+            return {};
+        return [pc](R5900Context &context) { context.pc = pc; };
+    }
+
+    EeWaitState readWait(ps2x::savestate::Reader &in)
+    {
+        EeWaitState wait;
+        wait.reason = static_cast<EeWaitReason>(in.pod<uint8_t>());
+        switch (in.u32())
+        {
+        case 1: wait.payload = in.pod<EeSemaphoreWait>(); break;
+        case 2: wait.payload = in.pod<EeEventFlagWait>(); break;
+        case 3: wait.payload = in.pod<EeVSyncWait>(); break;
+        case 4: wait.payload = in.pod<EeExternalWait>(); break;
+        default: wait.payload = std::monostate{}; break;
+        }
+        wait.resumePc = in.u32();
+        wait.completion = resumeAt(wait.resumePc);
+        return wait;
+    }
+}
+
+bool EeScheduler::saveStateClean(std::string &why) const
+{
+    if (!m_pendingInvocations.empty())
+    {
+        why = "an interrupt or callback is queued";
+        return false;
+    }
+    for (const auto &[id, t] : m_threads)
+    {
+        if (!t.invocations.empty())
+        {
+            why = "thread " + std::to_string(id) + " is inside an interrupt or callback";
+            return false;
+        }
+        if (t.resumeCompletion && t.resumeCompletionPc == 0u)
+        {
+            why = "thread " + std::to_string(id) + " is finishing a system call";
+            return false;
+        }
+        if (t.wait.completion && t.wait.resumePc == 0u)
+        {
+            why = "thread " + std::to_string(id) + " waits on a stream or movie";
+            return false;
+        }
+    }
+    return true;
+}
+
+void EeScheduler::saveState(ps2x::savestate::Writer &out) const
+{
+    const auto now = std::chrono::steady_clock::now();
+    out.section("ee-scheduler");
+    out.u32(static_cast<uint32_t>(m_threads.size()));
+    for (const auto &[id, t] : m_threads)
+    {
+        out.pod(t.id);
+        out.pod(t.context);
+        out.u32(t.entry); out.u32(t.stack); out.u32(t.stackSize); out.u32(t.gp);
+        out.u32(t.attr); out.u32(t.option); out.u32(t.arg);
+        out.pod(t.initialPriority); out.pod(t.currentPriority);
+        out.pod(static_cast<uint8_t>(t.status));
+        out.pod(t.suspendCount); out.u32(t.wakeupCount);
+        out.pod(t.ownsStack); out.u32(t.tlsBase);
+        writeWait(out, t.wait);
+        out.u32(t.resumeCompletion ? t.resumeCompletionPc : 0u);
+    }
+    for (const auto &queue : m_readyQueues)
+        out.podDeque(queue);
+    out.u32(static_cast<uint32_t>(m_semaphores.size()));
+    for (const auto &[id, s] : m_semaphores)
+    {
+        out.pod(s.id); out.pod(s.count); out.pod(s.maxCount); out.pod(s.initCount);
+        out.u32(s.attr); out.u32(s.option);
+        out.podDeque(s.waiters);
+    }
+    out.u32(static_cast<uint32_t>(m_eventFlags.size()));
+    for (const auto &[id, f] : m_eventFlags)
+    {
+        out.pod(f.id); out.u32(f.attr); out.u32(f.option); out.u32(f.initBits); out.u32(f.bits);
+        out.podDeque(f.waiters);
+    }
+    auto writeMap = [&out](const auto &map) {
+        out.u32(static_cast<uint32_t>(map.size()));
+        for (const auto &[id, v] : map)
+            out.pod(v);
+    };
+    writeMap(m_alarms);
+    writeMap(m_intcHandlers);
+    writeMap(m_dmacHandlers);
+    const int counters[] = {m_nextThreadId, m_nextInvocationThreadId, m_nextSemaphoreId, m_nextEventFlagId,
+                            m_nextAlarmId, m_nextIntcHandlerId, m_nextDmacHandlerId, m_intcHeadOrder, m_intcTailOrder,
+                            m_dmacHeadOrder, m_dmacTailOrder, m_currentThreadId};
+    out.pod(counters);
+    out.u32(m_enabledIntcMask); out.u32(m_enabledDmacMask);
+    out.pod(m_rescheduleRequested); out.pod(m_timeSliceExpired);
+    out.u32(m_pendingEeTimerInterrupts);
+    out.u64(m_eeCycle); out.u64(m_sliceEndCycle);
+    out.pod(untilNs(m_hostSyncStart, now));
+    out.u64(m_hostSyncCycleBase); out.u32(m_hostSyncCountdown);
+    {
+        std::lock_guard lock(m_eventMutex);
+        out.podDeque(m_events);
+        out.u32(static_cast<uint32_t>(m_deadlines.size()));
+        for (const ScheduledEvent &d : m_deadlines)
+        {
+            out.u64(d.deadlineCycle);
+            out.pod(untilNs(d.hostDeadline, now));
+            out.pod(d.event);
+            out.u64(d.sequence);
+        }
+    }
+    out.u64(m_eventSequence); out.u64(m_invocationSequence); out.u64(m_vsyncTick);
+    out.u32(m_vsyncFlagAddress); out.u32(m_vsyncTickAddress);
+    out.u32(m_gsVSyncCallback); out.u32(m_gsVSyncCallbackGp); out.u32(m_gsVSyncCallbackSp);
+    out.u32(m_gsFinishSeen);
+    out.u32(static_cast<uint32_t>(m_invocationStackTops.size()));
+    for (const auto &[k, v] : m_invocationStackTops)
+    {
+        out.u64(k);
+        out.u32(v);
+    }
+}
+
+bool EeScheduler::loadState(ps2x::savestate::Reader &in)
+{
+    assertExecutor();
+    const auto now = std::chrono::steady_clock::now();
+    if (!in.section("ee-scheduler"))
+        return false;
+    std::unordered_map<int, GuestThread> threads;
+    const uint32_t threadCount = in.u32();
+    for (uint32_t i = 0; i < threadCount && !in.failed(); ++i)
+    {
+        GuestThread t;
+        in.pod(t.id);
+        in.pod(t.context);
+        t.entry = in.u32(); t.stack = in.u32(); t.stackSize = in.u32(); t.gp = in.u32();
+        t.attr = in.u32(); t.option = in.u32(); t.arg = in.u32();
+        in.pod(t.initialPriority); in.pod(t.currentPriority);
+        t.status = static_cast<EeThreadStatus>(in.pod<uint8_t>());
+        in.pod(t.suspendCount); t.wakeupCount = in.u32();
+        in.pod(t.ownsStack); t.tlsBase = in.u32();
+        t.wait = readWait(in);
+        t.resumeCompletionPc = in.u32();
+        t.resumeCompletion = resumeAt(t.resumeCompletionPc);
+        const int id = t.id;
+        threads[id] = std::move(t);
+    }
+    std::array<std::deque<int>, kPriorityCount> ready{};
+    for (auto &queue : ready)
+        in.podDeque(queue);
+    std::unordered_map<int, EeSemaphore> semaphores;
+    const uint32_t semCount = in.u32();
+    for (uint32_t i = 0; i < semCount && !in.failed(); ++i)
+    {
+        EeSemaphore s;
+        in.pod(s.id); in.pod(s.count); in.pod(s.maxCount); in.pod(s.initCount);
+        s.attr = in.u32(); s.option = in.u32();
+        in.podDeque(s.waiters);
+        const int id = s.id;
+        semaphores[id] = std::move(s);
+    }
+    std::unordered_map<int, EeEventFlag> flags;
+    const uint32_t flagCount = in.u32();
+    for (uint32_t i = 0; i < flagCount && !in.failed(); ++i)
+    {
+        EeEventFlag f;
+        in.pod(f.id); f.attr = in.u32(); f.option = in.u32(); f.initBits = in.u32(); f.bits = in.u32();
+        in.podDeque(f.waiters);
+        const int id = f.id;
+        flags[id] = std::move(f);
+    }
+    auto readMap = [&in](auto &map) {
+        using V = typename std::decay_t<decltype(map)>::mapped_type;
+        map.clear();
+        const uint32_t n = in.u32();
+        for (uint32_t i = 0; i < n && !in.failed(); ++i)
+        {
+            V v = in.pod<V>();
+            map[v.id] = v;
+        }
+    };
+    std::unordered_map<int, EeAlarm> alarms;
+    std::unordered_map<int, EeIrqHandler> intc, dmac;
+    readMap(alarms);
+    readMap(intc);
+    readMap(dmac);
+    int counters[12] = {};
+    in.pod(counters);
+    const uint32_t intcMask = in.u32();
+    const uint32_t dmacMask = in.u32();
+    const bool reschedule = in.pod<bool>();
+    const bool sliceExpired = in.pod<bool>();
+    const uint32_t timerIrqs = in.u32();
+    const uint64_t eeCycle = in.u64();
+    const uint64_t sliceEnd = in.u64();
+    const int64_t hostSyncStart = in.pod<int64_t>();
+    const uint64_t hostSyncBase = in.u64();
+    const uint32_t hostSyncCountdown = in.u32();
+    std::deque<EeEvent> events;
+    in.podDeque(events);
+    std::vector<ScheduledEvent> deadlines;
+    const uint32_t deadlineCount = in.u32();
+    for (uint32_t i = 0; i < deadlineCount && !in.failed(); ++i)
+    {
+        ScheduledEvent d;
+        d.deadlineCycle = in.u64();
+        d.hostDeadline = fromNs(in.pod<int64_t>(), now);
+        in.pod(d.event);
+        d.sequence = in.u64();
+        deadlines.push_back(d);
+    }
+    const uint64_t eventSeq = in.u64();
+    const uint64_t invocationSeq = in.u64();
+    const uint64_t vsyncTick = in.u64();
+    const uint32_t vsyncFlag = in.u32();
+    const uint32_t vsyncTickAddr = in.u32();
+    const uint32_t gsCb = in.u32();
+    const uint32_t gsCbGp = in.u32();
+    const uint32_t gsCbSp = in.u32();
+    const uint32_t gsFinish = in.u32();
+    std::unordered_map<uint64_t, uint32_t> stackTops;
+    const uint32_t topCount = in.u32();
+    for (uint32_t i = 0; i < topCount && !in.failed(); ++i)
+    {
+        const uint64_t k = in.u64();
+        stackTops[k] = in.u32();
+    }
+    if (in.failed())
+        return false;
+
+    // All read: now replace the live state.
+    m_threads = std::move(threads);
+    m_readyQueues = std::move(ready);
+    m_semaphores = std::move(semaphores);
+    m_eventFlags = std::move(flags);
+    m_alarms = std::move(alarms);
+    m_intcHandlers = std::move(intc);
+    m_dmacHandlers = std::move(dmac);
+    m_nextThreadId = counters[0]; m_nextInvocationThreadId = counters[1]; m_nextSemaphoreId = counters[2];
+    m_nextEventFlagId = counters[3]; m_nextAlarmId = counters[4]; m_nextIntcHandlerId = counters[5];
+    m_nextDmacHandlerId = counters[6]; m_intcHeadOrder = counters[7]; m_intcTailOrder = counters[8];
+    m_dmacHeadOrder = counters[9]; m_dmacTailOrder = counters[10]; m_currentThreadId = counters[11];
+    m_enabledIntcMask = intcMask; m_enabledDmacMask = dmacMask;
+    m_rescheduleRequested = reschedule; m_timeSliceExpired = sliceExpired;
+    m_insideInterrupt = false;
+    m_pendingEeTimerInterrupts = timerIrqs;
+    m_eeCycle = eeCycle; m_sliceEndCycle = sliceEnd;
+    m_hostSyncStart = fromNs(hostSyncStart, now);
+    m_hostSyncCycleBase = hostSyncBase; m_hostSyncCountdown = hostSyncCountdown;
+    m_pendingInvocations.clear();
+    {
+        std::lock_guard lock(m_eventMutex);
+        m_events = std::move(events);
+        m_deadlines = std::move(deadlines);
+        updateNextDeadline();
+    }
+    m_eventSequence = eventSeq; m_invocationSequence = invocationSeq; m_vsyncTick = vsyncTick;
+    m_vsyncFlagAddress = vsyncFlag; m_vsyncTickAddress = vsyncTickAddr;
+    m_gsVSyncCallback = gsCb; m_gsVSyncCallbackGp = gsCbGp; m_gsVSyncCallbackSp = gsCbSp;
+    m_gsFinishSeen = gsFinish;
+    m_invocationStackTops = std::move(stackTops);
+    m_checkpointPending.store(false, std::memory_order_release);
+    copyMainContextToRuntime();
+    publishSnapshot();
+    return true;
 }

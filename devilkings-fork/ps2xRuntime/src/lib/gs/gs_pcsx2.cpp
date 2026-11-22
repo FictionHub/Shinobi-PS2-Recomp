@@ -42,8 +42,36 @@
 #include <windows.h>
 #endif
 
+bool ps2xResultsScreenActive(); // ps2_estimate_trace.cpp (LOCAL PATCH: results screen depth fix)
+
 namespace ps2x::pcsx2gs
 {
+    // LOCAL PATCH (stage-clear results screen: the rank letter and the NEXT / RETRY / QUIT words were missing). That
+    // screen draws all its 2D pieces at one depth (0x200) with the test "depth >= what is there"; PCSX2's hardware
+    // renderers fail it for the rank, the menu words and (as the screen goes on) most of the text, while its software
+    // renderer and a PS2 pass it. Proven on a recording of the screen: with the test set to "always" the hardware
+    // renderer draws it exactly like the software one. So while the results screen runs (its code is called every
+    // frame: ps2xResultsScreenActive, ps2_estimate_trace.cpp), TEST's ZTST "greater or equal" becomes "always".
+    // PS2X_RESULTS_ZFIX: 0 off, 1 on the results screen (default), 2 always (testing it on a replayed recording).
+    static void resultsDepthFix(uint8_t *packet, uint32_t sizeBytes, bool replay)
+    {
+        static const int s_zfix = []() { const char *v = std::getenv("PS2X_RESULTS_ZFIX"); return v && v[0] ? v[0] - '0' : 1; }();
+        if (!(s_zfix == 2 || (s_zfix == 1 && !replay && ::ps2xResultsScreenActive())))
+            return;
+        for (uint32_t offset = 0; offset + 16u <= sizeBytes; offset += 16u)
+        {
+            uint64_t lo = 0u, hi = 0u;
+            std::memcpy(&lo, packet + offset, 8u);
+            std::memcpy(&hi, packet + offset + 8u, 8u);
+            const uint64_t reg = hi & 0xFFu;
+            if ((reg != 0x47u && reg != 0x48u) || (hi >> 8u) != 0u || ((lo >> 17u) & 3u) != 2u || ((lo >> 16u) & 1u) == 0u ||
+                (lo >> 19u) != 0u)
+                continue; // only a clean TEST_1/2 A+D write: ZTE on, ZTST = GEQUAL, nothing above bit 18
+            lo = (lo & ~(3ull << 17u)) | (1ull << 17u); // ZTST = ALWAYS
+            std::memcpy(packet + offset, &lo, 8u);
+        }
+    }
+
     // LOCAL PATCH (freeze report): GIF bytes handed to PCSX2 since start, read by the perf recorder.
     static std::atomic<uint64_t> g_bytesSubmitted{0};
 
@@ -53,6 +81,7 @@ namespace ps2x::pcsx2gs
     static std::atomic<bool> g_captureHold{false};
     static FILE *g_captureFile = nullptr;
     static uint64_t g_captureEndNs = 0u;
+    bool readVram(uint8_t *dst, uint32_t sizeBytes); // below
     uint64_t bytesSubmitted()
     {
         return g_bytesSubmitted.load(std::memory_order_relaxed);
@@ -69,6 +98,7 @@ namespace ps2x::pcsx2gs
             int (*vsync)(RrvPcsx2GsBridge *, const uint64_t *, uint64_t, uint32_t, char *, uint32_t) = nullptr;
             int (*snapshot)(RrvPcsx2GsBridge *, RrvPcsx2GsBridgeFrame *, char *, uint32_t) = nullptr;
             int (*snapshotLocalMemory)(RrvPcsx2GsBridge *, uint8_t *, uint32_t, char *, uint32_t) = nullptr;
+            int (*restoreLocalMemory)(RrvPcsx2GsBridge *, const uint8_t *, uint32_t, char *, uint32_t) = nullptr; // LOCAL PATCH (save states)
             int (*readLocalMemory)(RrvPcsx2GsBridge *, uint8_t *, uint32_t, uint64_t, uint64_t, uint64_t, char *, uint32_t) = nullptr;
             int (*resetGs)(RrvPcsx2GsBridge *, char *, uint32_t) = nullptr;
             int (*updateOptions)(RrvPcsx2GsBridge *, char *, uint32_t) = nullptr; // LOCAL PATCH, optional
@@ -404,6 +434,8 @@ namespace ps2x::pcsx2gs
             api.readLocalMemory = reinterpret_cast<decltype(api.readLocalMemory)>(get("rrv_pcsx2_gs_bridge_read_local_memory"));
             api.snapshotLocalMemory =
                 reinterpret_cast<decltype(api.snapshotLocalMemory)>(get("rrv_pcsx2_gs_bridge_snapshot_local_memory"));
+            api.restoreLocalMemory =
+                reinterpret_cast<decltype(api.restoreLocalMemory)>(get("rrv_pcsx2_gs_bridge_restore_local_memory"));
             return api.version && api.create && api.destroy && api.submit && api.vsync && api.snapshot;
         }
 #else
@@ -1236,6 +1268,7 @@ namespace ps2x::pcsx2gs
                 }
             }
         }
+        resultsDepthFix(job.data.data(), sizeBytes, false); // LOCAL PATCH (results screen), see resultsDepthFix
         pushLocked(s, q, std::move(job));
     }
 
@@ -1469,7 +1502,23 @@ namespace ps2x::pcsx2gs
         const std::string path = std::string("captures/gs_capture_") + stamp + ".bin";
         FILE *file = std::fopen(path.c_str(), "wb");
         bool ok = file != nullptr;
+        // LOCAL PATCH: the whole graphics memory as the bridge holds it (raw, record type 20, restored as it is by the
+        // replay), so a recording started in the middle of a stage has its textures. The old way below (reading it back
+        // as pixels) is refused by the bridge.
+        bool rawDone = false;
+        {
+            std::vector<uint8_t> raw(RRV_PCSX2_GS_BRIDGE_LOCAL_MEMORY_BYTES);
+            if (ok && readVram(raw.data(), static_cast<uint32_t>(raw.size())))
+            {
+                const uint32_t header[2] = {20u, static_cast<uint32_t>(raw.size())};
+                ok = std::fwrite(header, sizeof(header), 1u, file) == 1u && std::fwrite(raw.data(), 1u, raw.size(), file) == raw.size();
+                std::fprintf(stderr, "[capture] graphics memory recorded (4 MB)\n");
+                rawDone = true;
+            }
+        }
         constexpr uint32_t kRows = 1024u, kWidth = 64u, kChunks = 16u; // 16 x 256 KB = all 4 MB
+        if (!rawDone)
+        {
         constexpr uint32_t kBytes = kRows * kWidth * 4u;
         std::vector<uint8_t> pixels(kBytes);
         std::vector<uint8_t> packet(16u * 6u + kBytes);
@@ -1478,9 +1527,13 @@ namespace ps2x::pcsx2gs
             const uint64_t bp = static_cast<uint64_t>(chunk) * (kRows / 32u) * 32u; // 32 pages of 32 blocks per chunk
             const uint64_t trxreg = static_cast<uint64_t>(kWidth) | (static_cast<uint64_t>(kRows) << 32);
             const uint64_t readBuf = bp | (1ull << 16); // SBP, SBW = 1 (64 pixels), SPSM = PSMCT32
-            ok = readLocalToHost(pixels.data(), kBytes, readBuf, 0u, trxreg);
-            if (!ok)
+            if (!readLocalToHost(pixels.data(), kBytes, readBuf, 0u, trxreg))
+            {
+                // LOCAL PATCH: the bridge refuses this read ("rejected local-to-host transfer"), so the recording is
+                // the drawing only (no graphics memory): still enough to see which sprites the game sends.
+                std::fprintf(stderr, "[capture] graphics memory not readable: recording the drawing only\n");
                 break;
+            }
             // GIF packet: A+D tag (4 registers), BITBLTBUF/TRXPOS/TRXREG/TRXDIR=0, then an IMAGE tag and the pixels.
             uint64_t q[12] = {};
             q[0] = 4u | (1ull << 60); // NLOOP 4, PACKED, NREG 1
@@ -1501,6 +1554,7 @@ namespace ps2x::pcsx2gs
             ok = std::fwrite(header, sizeof(header), 1u, file) == 1u &&
                  std::fwrite(packet.data(), 1u, sizeof(q) + kBytes, file) == sizeof(q) + kBytes;
         }
+        } // !rawDone
         {
             std::lock_guard<std::mutex> q(s.qMutex);
             if (ok)
@@ -1517,9 +1571,34 @@ namespace ps2x::pcsx2gs
         return ok;
     }
 
-    bool readVram(uint8_t *dst, uint32_t sizeBytes)
+    // LOCAL PATCH (save states, GitHub #16): puts a whole 4 MiB graphics memory image back (after the drawing queued so
+    // far has been handed to the renderer, so nothing older lands on top of it).
+    bool restoreVram(const uint8_t *src, uint32_t sizeBytes)
     {
-        if (!dst || !active())
+        if (!src || sizeBytes != RRV_PCSX2_GS_BRIDGE_LOCAL_MEMORY_BYTES || !active())
+            return false;
+        State &s = state();
+        if (!ensureStarted(s))
+            return false;
+        drain(s);
+        std::lock_guard<std::mutex> lock(s.mutex);
+        if (!s.started || !s.api.restoreLocalMemory)
+            return false;
+        char error[256] = {};
+        const int done = guardedCall(s.api.restoreLocalMemory, s.bridge, src, sizeBytes, static_cast<char *>(error),
+                                     static_cast<uint32_t>(sizeof(error)));
+        if (done == kCrashed)
+        {
+            abandon(s, "the PCSX2 bridge crashed restoring graphics memory");
+            return false;
+        }
+        if (done == 0)
+            std::fprintf(stderr, "[savestate] graphics memory restore failed: %s\n", error);
+        return done == 1;
+    }
+
+    bool readVram(uint8_t *dst, uint32_t sizeBytes)
+    {        if (!dst || !active())
             return false;
         State &s = state();
         if (!ensureStarted(s))
@@ -1663,10 +1742,17 @@ namespace ps2x::pcsx2gs
                             std::memcpy(data + offset, &lo, 8u);
                         }
                     }
+                resultsDepthFix(data, header[1], true); // only with PS2X_RESULTS_ZFIX=2 (no game code runs in a replay)
                 if (guardedCall(s.api.submit, s.bridge, header[0], static_cast<const uint8_t *>(data), header[1],
                                 static_cast<char *>(error), static_cast<uint32_t>(sizeof(error))) != 1)
                     std::fprintf(stderr, "[replay] submit failed at packet %llu: %s\n", static_cast<unsigned long long>(packets), error);
                 ++packets;
+            }
+            else if (header[0] == 20u && header[1] == RRV_PCSX2_GS_BRIDGE_LOCAL_MEMORY_BYTES && s.api.restoreLocalMemory)
+            {
+                // LOCAL PATCH: the recorded graphics memory, put back as it was.
+                guardedCall(s.api.restoreLocalMemory, s.bridge, static_cast<const uint8_t *>(data), header[1], static_cast<char *>(error),
+                            static_cast<uint32_t>(sizeof(error)));
             }
             else if (header[0] == 11u && s.api.resetGs)
             {

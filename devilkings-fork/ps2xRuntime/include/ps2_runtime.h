@@ -508,6 +508,7 @@ private:
 
     friend class PS2IopTransport;
     friend class EeScheduler;
+    friend struct PS2SaveStateAccess; // LOCAL PATCH (save states): ps2_savestate.cpp
 
 private:
     PS2Memory m_memory;

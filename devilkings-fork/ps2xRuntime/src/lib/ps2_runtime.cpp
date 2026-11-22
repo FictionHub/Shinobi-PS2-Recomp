@@ -1,4 +1,5 @@
 #include "ps2_runtime.h"
+#include "runtime/ps2_savestate.h" // LOCAL PATCH (save states)
 #include "ps2_log.h"
 #include "ps2_stubs.h"
 #include "runtime/ps2_profiler.h"
@@ -624,6 +625,7 @@ extern std::atomic<long long> g_ps2CaptureTraceTick; // gs_frontend.cpp
 extern std::atomic<bool> g_ps2StageDetected;         // ps2_vu1_core.cpp
 extern std::atomic<bool> g_ps2MouseLookActive;       // Pad.cpp: the mouse is captured and turns the camera
 extern std::atomic<float> g_ps2MouseStickX;          // Pad.cpp
+extern std::atomic<int> g_ps2MouseWheelNotches;      // Pad.cpp (LOCAL PATCH: mouse in menus)
 
 // LOCAL PATCH: 1:1 mouse aiming. Mouse movement (pixels x the Mouse camera speed setting) waits here until the camera
 // reads its stick (CCameraManage::_MovePad / _MovePadOtherFollow, hooks in scripts/runner_patches.py), then all of it is
@@ -632,7 +634,7 @@ extern std::atomic<float> g_ps2MouseStickX;          // Pad.cpp
 // as far as the hand went.
 namespace
 {
-    constexpr float kMouseAimUnitsPerPixel = 2.0f;
+    constexpr float kMouseAimUnitsPerPixel = 6.0f; // 0.2 degrees a pixel at 100 % (2.0 felt far too slow)
     std::atomic<float> g_mouseAimX{0.0f}, g_mouseAimY{0.0f};
     std::atomic<double> g_mouseAimRead{0.0}; // when the camera last took some (GetTime)
 
@@ -657,18 +659,42 @@ void ps2xMouseAimAdd(float dx, float dy)
     g_mouseAimY.fetch_add(dy * kMouseAimUnitsPerPixel, std::memory_order_relaxed);
 }
 
+// LOCAL PATCH (mouse camera did not turn): the game reads the camera stick (where these hooks sit) only while the right
+// stick counts as pushed (_MovePad checks PadGetPush on the stick's directions first). A mouse alone never pushed it, so
+// the movement was never taken. A hook just after that check (runner_patches.py, "mouse wants the camera") answers
+// yes while mouse movement waits (ps2xMouseAimWants). g_ps2MouseFakePush stays false (an earlier pushed-stick attempt).
+std::atomic<bool> g_ps2MouseFakePush{false};
+bool ps2xMouseAimWants();
+bool ps2xMouseAimPending()
+{
+    return std::fabs(g_mouseAimX.load(std::memory_order_relaxed)) >= 1.0f ||
+           std::fabs(g_mouseAimY.load(std::memory_order_relaxed)) >= 1.0f;
+}
+
+bool ps2xMouseAimWants()
+{
+    return g_ps2MouseLookActive.load(std::memory_order_relaxed) && ps2xMouseAimPending();
+}
+
 // From the camera hooks: the stick value the game read, plus the mouse movement since the last read.
+void ps2xPlayHeartbeat(); // ps2_hud_mod.cpp: the stage camera runs only while playing
 int ps2xMouseAimX(int stick)
 {
+    ps2xPlayHeartbeat();
     if (!g_ps2MouseLookActive.load(std::memory_order_relaxed))
         return stick;
+    if (g_ps2MouseFakePush.load(std::memory_order_relaxed))
+        stick = 0;
     return stick + mouseAimTake(g_mouseAimX, ps2x::settings::getBool("input", "invert_camera_x"));
 }
 
 int ps2xMouseAimY(int stick)
 {
+    ps2xPlayHeartbeat();
     if (!g_ps2MouseLookActive.load(std::memory_order_relaxed))
         return stick;
+    if (g_ps2MouseFakePush.load(std::memory_order_relaxed))
+        stick = 0;
     return stick + mouseAimTake(g_mouseAimY, ps2x::settings::getBool("input", "invert_camera_y"));
 }
 extern std::atomic<float> g_ps2MouseStickY;          // Pad.cpp
@@ -760,6 +786,12 @@ static std::atomic<uint32_t> g_widescreenGp{0};
 static std::atomic<float> g_widescreenApplied{0.0f};
 static std::atomic<bool> g_widescreenQueued{false};
 
+// LOCAL PATCH (field of view): the main camera's screen, the one AdjustDisplayGameAspect widens (0 = not seen yet).
+uint32_t ps2xWidescreenMainScreen()
+{
+    return g_widescreenScreen.load(std::memory_order_relaxed);
+}
+
 float ps2xWidescreenFactor()
 {
     return static_cast<float>((4.0 / 3.0) / ps2xWidescreenShape());
@@ -804,6 +836,7 @@ void ps2xWidescreenVsync(PS2Runtime &runtime)
 static std::string g_toastName;
 static bool g_toastOn = false;
 static double g_toastStart = -100.0;
+static bool g_toastPlain = false; // LOCAL PATCH (save states): a message, not a setting's On / Off
 
 // LOCAL PATCH: the text of the performance overlay and the hotkey notices in a proper typeface instead of raylib's pixel
 // font: Bahnschrift (the font of Windows' own performance widgets), else Segoe UI Semibold, else the built-in one. Loaded
@@ -853,7 +886,100 @@ static void ps2xHotkeyToast(const char *name, bool on)
 {
     g_toastName = name;
     g_toastOn = on;
+    g_toastPlain = false;
     g_toastStart = GetTime();
+}
+
+// LOCAL PATCH (save states): a one-line message (green when it went well, grey when not).
+static std::atomic<bool> g_ps2HotkeyRestart{false}; // LOCAL PATCH: Ctrl+R twice = restart the game
+static void ps2xMessageToast(const std::string &text, bool good)
+{
+    g_toastName = text;
+    g_toastOn = good;
+    g_toastPlain = true;
+    g_toastStart = GetTime();
+}
+
+// LOCAL PATCH: the shortcuts panel (H): every hotkey with what it does and, for the switches, whether it is on now. On the
+// right, so it never covers the performance overlay; slides in and out. H does nothing while it is bound to a pad button.
+static bool g_shortcutsShown = false;
+static double g_shortcutsChanged = -100.0;
+extern std::atomic<bool> g_ps2MouseLookActive; // Pad.cpp
+
+static void ps2xDrawShortcuts()
+{
+    constexpr double kSlide = 0.22;
+    const double t = GetTime() - g_shortcutsChanged;
+    double show = g_shortcutsShown ? std::min(1.0, t / kSlide) : 1.0 - std::min(1.0, t / kSlide);
+    if (show <= 0.0)
+        return;
+    show = 1.0 - (1.0 - show) * (1.0 - show) * (1.0 - show);
+    struct Row
+    {
+        const char *key;
+        const char *what;
+        int state; // -1: an action (no state), 0 off, 1 on
+    };
+    auto on = [](const char *section, const char *key) { return ps2x::settings::getBool(section, key) ? 1 : 0; };
+    struct Group
+    {
+        const char *title;
+        std::vector<Row> rows;
+    };
+    const std::vector<Group> groups = {
+        {"GAME", {{"F1", "Menu (pauses the game)", -1}, {"Select+Start", "Menu on the controller", -1},
+                  {"Ctrl+F1", "Save state", -1}, {"Ctrl+F2", "Load state", -1}, {"Ctrl+1/2/3", "Pick state slot", -1},
+                  {"Ctrl+R x2", "Restart the game", -1}, {"F11", "Window / full screen", -1}}},
+        {"DISPLAY", {{"F2", "Performance overlay", on("performance", "stats_overlay")},
+                     {"F4", "Frame generation", on("video", "frame_generation")},
+                     {"F6", "Low latency", on("video", "low_latency")},
+                     {"F5", "Hide HUD", on("game", "hide_hud")},
+                     {"Shift+F5", "HD textures", on("video", "hd_textures")},
+                     {"F7", "IMAX mode", on("game", "hide_cinema_bars")}}},
+        {"CAMERA", {{"F3", "Close-up camera", on("game", "close_camera")},
+                    {"F10", "Mouse camera", g_ps2MouseLookActive.load(std::memory_order_relaxed) ? 1 : 0}}},
+        {"GAMEPLAY", {{"F8", "Infinite health", on("game", "infinite_health")},
+                      {"Shift+F7", "No sword hunger", on("game", "no_sword_hunger")},
+                      {"F9", "Fair final boss", on("game", "fair_final_boss")},
+                      {"Shift+F6", "Unlock everything", on("game", "unlock_all")}}},
+        {"SCARF", {{"Shift+F8", "Remove scarf", on("game", "hide_scarf")},
+                   {"Shift+F9", "Scarf body collision", on("game", "scarf_collision")}}},
+    };
+    const int size = std::max(14, GetScreenHeight() / 64);
+    const int line = size * 3 / 2, pad = size, margin = 16;
+    const int keyW = ps2xUiTextWidth("Select+Start", size) + size;
+    const int whatW = ps2xUiTextWidth("Menu (pauses the game)", size) + size;
+    const int stateW = ps2xUiTextWidth("OFF", size);
+    int rows = 0;
+    for (const Group &g : groups)
+        rows += static_cast<int>(g.rows.size()) + 1;
+    const int w = pad * 2 + keyW + whatW + stateW;
+    const int h = pad * 2 + line * (rows + 1) + line / 2;
+    const int x = GetScreenWidth() - margin - static_cast<int>(w * show) + static_cast<int>((1.0 - show) * margin);
+    int y = std::max(margin, (GetScreenHeight() - h) / 2);
+    DrawRectangleRounded(Rectangle{static_cast<float>(x), static_cast<float>(y), static_cast<float>(w), static_cast<float>(h)},
+                         0.04f, 8, Color{10, 10, 14, static_cast<unsigned char>(225 * show)});
+    DrawRectangle(x, y + pad, std::max(4, size / 5), h - 2 * pad, Color{230, 230, 235, static_cast<unsigned char>(255 * show)});
+    const unsigned char a = static_cast<unsigned char>(255 * show);
+    y += pad;
+    ps2xUiText("SHORTCUTS", x + pad, y, size, Color{245, 245, 250, a});
+    const char *hint = "H to hide";
+    ps2xUiText(hint, x + w - pad - ps2xUiTextWidth(hint, size), y, size, Color{140, 140, 150, a});
+    y += line + line / 2;
+    for (const Group &g : groups)
+    {
+        ps2xUiText(g.title, x + pad, y, size * 4 / 5, Color{150, 150, 160, a});
+        y += line;
+        for (const Row &r : g.rows)
+        {
+            ps2xUiText(r.key, x + pad, y, size, Color{255, 214, 92, a});
+            ps2xUiText(r.what, x + pad + keyW, y, size, Color{225, 225, 232, a});
+            if (r.state >= 0)
+                ps2xUiText(r.state ? "ON" : "OFF", x + pad + keyW + whatW, y, size,
+                           r.state ? Color{60, 255, 110, a} : Color{130, 130, 140, a});
+            y += line;
+        }
+    }
 }
 
 static void ps2xDrawHotkeyToast()
@@ -875,8 +1001,8 @@ static void ps2xDrawHotkeyToast()
         show = 1.0 - x * x * x;
     }
     const int size = std::max(18, GetScreenHeight() / 48);
-    const std::string state = g_toastOn ? "On" : "Off";
-    const std::string text = g_toastName + ":  ";
+    const std::string state = g_toastPlain ? std::string() : std::string(g_toastOn ? "On" : "Off");
+    const std::string text = g_toastPlain ? g_toastName : g_toastName + ":  ";
     const int textW = ps2xUiTextWidth(text.c_str(), size), stateW = ps2xUiTextWidth(state.c_str(), size);
     const int padX = size, padY = size * 2 / 3, bar = std::max(4, size / 5), margin = 16;
     const int w = bar + padX + textW + stateW + padX, h = size + 2 * padY;
@@ -1425,6 +1551,24 @@ static void PollMarkHotkey(uint64_t currentTick)
     s_padWasDown = padDown;
     // LOCAL PATCH: F7 records graphics memory and the next 15 seconds of drawing (gs_pcsx2.cpp startCapture), for an
     // effect that draws wrong. Runs on its own thread: the copy waits for the GS thread.
+    // Test hook: PS2X_CAPTURE_AT=<seconds> starts the same recording by itself at that point of the run (10 s long).
+    static const double s_captureAt = std::getenv("PS2X_CAPTURE_AT") ? std::atof(std::getenv("PS2X_CAPTURE_AT")) : -1.0;
+    static bool s_captureAtDone = false;
+    if (s_captureAt >= 0.0 && !s_captureAtDone)
+    {
+        // Its own timer thread: this function only runs while the window draws, which stops while it is minimised.
+        s_captureAtDone = true;
+        // PS2X_CAPTURE_SECONDS sets the length (start it before a stage loads: the recording has the drawing only, so
+        // the textures must be uploaded inside it).
+        const char *len = std::getenv("PS2X_CAPTURE_SECONDS");
+        const double seconds = len ? std::clamp(std::atof(len), 1.0, 120.0) : 10.0;
+        std::thread([seconds]() {
+            while (RunSeconds() < s_captureAt)
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::fprintf(stderr, "[capture] automatic at t=%.1f (PS2X_CAPTURE_AT)\n", RunSeconds());
+            ps2x::pcsx2gs::startCapture(seconds);
+        }).detach();
+    }
     if (IsKeyPressed(KEY_F7) && CtrlHeld())
     {
         std::fprintf(stderr, "[capture] F7 at t=%.1f\n", RunSeconds());
@@ -1799,11 +1943,19 @@ static void NoteMovieBars(const uint8_t *pixels, uint32_t width, uint32_t height
     g_ps2MovieSubtitles.store(s_subsHold > 0u, std::memory_order_relaxed);
     if (s_outside < 5u)
     {
+        // LOCAL PATCH (GitHub issue #18): not every movie sits in the middle of the picture (the stage 7-A boss movie is
+        // drawn higher, with a taller black area under it). The movie's top is the highest row seen lit (never lower
+        // than the centred position: a dark scene only hides rows), and the movie's own height is kept below it.
+        float top = cut;
+        if (s_top != ~0u && s_top + 2u < bar)
+            top = static_cast<float>(s_top) / static_cast<float>(height);
+        const float rows = static_cast<float>(movieHeight) / 448.0f;
+        const float bottom = std::max(0.0f, 1.0f - top - rows);
         if (s_logged != 1)
-            std::fprintf(stderr, "[movie] %ux%u movie: shown without its bars in IMAX mode (%.2f:1)\n", movieWidth,
-                         movieHeight, (4.0f / 3.0f) / (1.0f - 2.0f * cut));
+            std::fprintf(stderr, "[movie] %ux%u movie: shown without its bars in IMAX mode (%.2f:1)%s\n", movieWidth,
+                         movieHeight, (4.0f / 3.0f) / rows, top < cut ? ", drawn above the middle" : "");
         s_logged = 1;
-        set(cut, cut);
+        set(top, bottom);
         return;
     }
     // The picture reaches past the movie's own rows: the rows it really covers.
@@ -3993,12 +4145,7 @@ bool PS2Runtime::eeCheckpointDue(uint32_t cycles) noexcept
 {
     const uint64_t currentTick = m_eeScheduler->currentVSyncTick();
     const uint64_t waitTicks = std::max<uint64_t>(1u, ticks);
-    m_eeScheduler->waitVSync(currentTick + waitTicks - 1u,
-                             0,
-                             [resumePc](R5900Context &context)
-                             {
-                                 context.pc = resumePc;
-                             });
+    m_eeScheduler->waitVSyncResume(currentTick + waitTicks - 1u, 0, resumePc); // LOCAL PATCH (save states)
 }
 
 void PS2Runtime::addEeExitHandler(int threadId, uint32_t function, uint32_t argument)
@@ -4925,7 +5072,11 @@ void PS2Runtime::run()
                 // whole height: no bars anywhere (the movie is stretched to the screen's shape, as the game's own
                 // widescreen picture is).
                 const float kept = 1.0f - cutTop - cutBottom;
-                srcRect = Rectangle{0.0f, srcHeight * cutTop, srcWidth, srcHeight * kept};
+                // GitHub issue #18: a hair off each side (1 of the PS2's 640 columns), so the picture's last column
+                // (left over, often blue) is not stretched into a line down the screen's edge.
+                // (1 column was not enough: the blue one is the second or third from the right edge, seen at 21:9.)
+                const float column = srcWidth / 640.0f;
+                srcRect = Rectangle{column, srcHeight * cutTop, srcWidth - 4.0f * column, srcHeight * kept};
                 dstHeight = screenHeight;
                 centreShift = 0.0f;
                 if (cutBottom > 0.0f && g_ps2MovieSubtitles.load(std::memory_order_relaxed))
@@ -4955,6 +5106,7 @@ void PS2Runtime::run()
             EndBlendMode();
         }
         presentation.drawFps(dstRect);
+        ps2xDrawShortcuts();
         ps2xDrawHotkeyToast();
         if (ps2x::ingame::isOpen()) // the game dimmed behind the in-game menu
             DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, 0.6f));
@@ -5091,8 +5243,74 @@ void PS2Runtime::run()
                     shiftKey ? flip("scarf_collision", "Scarf body collision") : flip("fair_final_boss", "Fair final boss");
             }
         }
+        // LOCAL PATCH (save states, GitHub #16): Ctrl+F1 saves the game's state, Ctrl+F2 loads it (slot 1); the EE
+        // thread does it at its next clean point (ps2_savestate.cpp) and the result is shown here.
+        {
+            // Ctrl, not Shift: Shift is L2 (ninja magic) by default, so Shift+F1 cast the magic too. Ctrl+Shift+F1 / F2 are the
+            // developer panels, so Shift must be up.
+            const bool shiftSS = (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT);
+            // Three slots: Ctrl+1 / 2 / 3 picks one (and says what it holds); Ctrl+F1 / F2 use the picked one.
+            for (int slot = 1; slot <= ps2x::savestate::kSlots; ++slot)
+                if (shiftSS && (IsKeyPressed(KEY_ONE + slot - 1) || IsKeyPressed(KEY_KP_1 + slot - 1)))
+                {
+                    ps2x::savestate::setCurrentSlot(slot);
+                    const std::string when = ps2x::savestate::slotLabel(slot);
+                    ps2xMessageToast("State slot " + std::to_string(slot) + (when.empty() ? ": empty" : ": saved " + when), true);
+                }
+            // LOCAL PATCH: Ctrl+R twice within 3 s restarts the game (no trip back to the launcher); the first press only
+            // asks, so a stray press never throws progress away.
+            {
+                static double s_restartAskedAt = -10.0;
+                if (shiftSS && IsKeyPressed(KEY_R))
+                {
+                    if (GetTime() - s_restartAskedAt < 3.0)
+                    {
+                        ps2xMessageToast("Restarting the game", true);
+                        g_ps2HotkeyRestart.store(true, std::memory_order_relaxed);
+                    }
+                    else
+                    {
+                        s_restartAskedAt = GetTime();
+                        ps2xMessageToast("Press Ctrl+R again to restart the game", true);
+                    }
+                }
+            }
+            if (shiftSS && IsKeyPressed(KEY_F1))
+                ps2x::savestate::requestSave(ps2x::savestate::currentSlot());
+            if (shiftSS && IsKeyPressed(KEY_F2))
+                ps2x::savestate::requestLoad(ps2x::savestate::currentSlot());
+            const std::string status = ps2x::savestate::takeStatus();
+            if (!status.empty())
+                ps2xMessageToast(status.substr(0, status.find(" (") == std::string::npos ? status.size() : status.find(" (")),
+                                 status.rfind("Saved", 0) == 0 || status.rfind("Loaded", 0) == 0);
+        }
+        // LOCAL PATCH: H shows / hides the shortcuts panel (not while H is bound to a pad button in [controls]).
+        {
+            static uint64_t s_hVersion = ~0ull;
+            static bool s_hBound = false;
+            if (const uint64_t v = ps2x::settings::version(); v != s_hVersion)
+            {
+                s_hVersion = v;
+                s_hBound = false;
+                for (const ps2x::settings::PadButton &button : ps2x::settings::padButtons())
+                {
+                    const std::string list = "," + ps2x::settings::get("controls", button.key) + ",";
+                    s_hBound = s_hBound || list.find(",H,") != std::string::npos;
+                }
+            }
+            const bool modsHeld = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) || IsKeyDown(KEY_LEFT_ALT) ||
+                                  IsKeyDown(KEY_RIGHT_ALT);
+            if (!s_hBound && !modsHeld && IsKeyPressed(KEY_H) && !ps2x::ingame::isOpen())
+            {
+                g_shortcutsShown = !g_shortcutsShown;
+                const double now = GetTime();
+                const double elapsed = std::min(0.22, now - g_shortcutsChanged);
+                g_shortcutsChanged = now - (0.22 - elapsed); // reverse from where the slide is now
+            }
+        }
         // LOCAL PATCH: F2 shows / hides the performance overlay at any time (saved, so it stays as left).
-        if (IsKeyPressed(KEY_F2) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
+        if (IsKeyPressed(KEY_F2) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT) && !IsKeyDown(KEY_LEFT_CONTROL) &&
+            !IsKeyDown(KEY_RIGHT_CONTROL))
         {
             const bool on = !ps2x::settings::getBool("performance", "stats_overlay");
             ps2x::settings::set("performance", "stats_overlay", on ? "true" : "false");
@@ -5125,7 +5343,7 @@ void PS2Runtime::run()
                     combo = (IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_MIDDLE_RIGHT) && IsGamepadButtonDown(pad, GAMEPAD_BUTTON_MIDDLE_LEFT)) ||
                             (IsGamepadButtonPressed(pad, GAMEPAD_BUTTON_MIDDLE_LEFT) && IsGamepadButtonDown(pad, GAMEPAD_BUTTON_MIDDLE_RIGHT));
             const bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-            if (IsKeyPressed(KEY_F1) && !shift)
+            if (IsKeyPressed(KEY_F1) && !shift && !IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL))
             {
                 if (ps2x::ingame::isOpen())
                     ps2x::ingame::close();
@@ -5150,7 +5368,9 @@ void PS2Runtime::run()
                     std::fprintf(stderr, "[input] mouse camera %s\n", s_override ? "on" : "off");
                 }
                 const bool enabled = s_override >= 0 ? s_override != 0 : ps2x::settings::get("input", "mouse_look") != "off";
-                const bool want = enabled && IsWindowFocused() && !ps2x::ingame::isOpen();
+                // Test hook: PS2X_TEST_MOUSE_DX=<pixels a frame> moves a pretend mouse sideways (background tests).
+                static const float s_testDx = std::getenv("PS2X_TEST_MOUSE_DX") ? static_cast<float>(std::atof(std::getenv("PS2X_TEST_MOUSE_DX"))) : 0.0f;
+                const bool want = enabled && (IsWindowFocused() || s_testDx != 0.0f) && !ps2x::ingame::isOpen();
                 if (want != s_captured)
                 {
                     if (want)
@@ -5167,13 +5387,50 @@ void PS2Runtime::run()
                 s_y = 0.0f;
                 if (s_captured)
                 {
-                    const Vector2 delta = GetMouseDelta();
+                    const Vector2 delta = s_testDx != 0.0f ? Vector2{s_testDx, 0.0f} : GetMouseDelta();
                     const float sensitivity = static_cast<float>(std::clamp(ps2x::settings::getNumber("input", "mouse_sensitivity"), 10, 400)) / 100.0f;
                     ps2xMouseAimAdd(delta.x * sensitivity, delta.y * sensitivity);
+                    // GitHub issue #20 (the mouse did not move the camera): when the camera hooks are not taking the
+                    // movement (a camera mode that does not read the stick through CCameraManage::_MovePad), the mouse
+                    // pushes the right stick as before 1:1 aiming, so it always turns the camera somehow.
+                    // which path the mouse is on, logged when it changes (1:1 hook or stick fallback)
+                    // Starved: movement has waited over 0.3 s while the stick was pushed for it and the hooks took none
+                    // (a camera mode that never reads it there). Only then the old stick push is used.
+                    static double s_waitSince = 0.0;
+                    const double nowT = GetTime();
+                    const bool unread = nowT - g_mouseAimRead.load(std::memory_order_relaxed) > 0.25;
+                    if (!ps2xMouseAimPending() || !unread)
+                        s_waitSince = 0.0;
+                    else if (s_waitSince == 0.0)
+                        s_waitSince = nowT;
+                    const bool starved = s_waitSince != 0.0 && nowT - s_waitSince > 0.3;
+                    {
+                        static int s_path = -1;
+                        const int path = starved ? 0 : 1;
+                        if ((delta.x != 0.0f || delta.y != 0.0f) && path != s_path)
+                        {
+                            s_path = path;
+                            std::fprintf(stderr, "[mouse] camera by %s\n", path ? "1:1 aiming (camera hook)" : "the right stick (fallback)");
+                        }
+                    }
+                    if (starved)
+                    {
+                        static float s_fx = 0.0f, s_fy = 0.0f; // a short smoothing, so the push does not flicker
+                        const float kx = std::clamp(delta.x * sensitivity / 4.0f, -1.0f, 1.0f);
+                        const float ky = std::clamp(delta.y * sensitivity / 4.0f, -1.0f, 1.0f);
+                        s_fx = s_fx * 0.5f + kx * 0.5f;
+                        s_fy = s_fy * 0.5f + ky * 0.5f;
+                        s_x = std::fabs(s_fx) < 0.02f ? 0.0f : s_fx;
+                        s_y = std::fabs(s_fy) < 0.02f ? 0.0f : s_fy;
+                    }
                 }
                 g_ps2MouseStickX.store(s_x, std::memory_order_relaxed);
                 g_ps2MouseStickY.store(s_y, std::memory_order_relaxed);
                 g_ps2MouseLookActive.store(s_captured, std::memory_order_relaxed);
+                // LOCAL PATCH (mouse in menus): wheel notches, used by ps2_pad.cpp as D-pad up / down in the game's menus.
+                if (s_captured)
+                    if (const float wheel = GetMouseWheelMove(); wheel != 0.0f)
+                        g_ps2MouseWheelNotches.fetch_add(wheel > 0.0f ? 1 : -1, std::memory_order_relaxed);
             }
             // LOCAL DEBUG: a frozen game leaves its reason in the log. When the game's own buffer swaps (sceGsSwapDBuff) stop
             // for 4 seconds outside the menu, every EE thread is listed once with its pc, ra and what it waits for, with the
@@ -5353,7 +5610,21 @@ void PS2Runtime::run()
             ps2x::ingame::update(hwnd);
             if (m_eeScheduler && m_eeScheduler->paused() != ps2x::ingame::isOpen())
                 m_eeScheduler->setPaused(ps2x::ingame::isOpen());
-            const ps2x::ingame::Request request = ps2x::ingame::takeRequest();
+            ps2x::ingame::Request request = ps2x::ingame::takeRequest();
+            if (g_ps2HotkeyRestart.exchange(false, std::memory_order_relaxed)) // Ctrl+R twice (above)
+                request = ps2x::ingame::Request::Restart;
+            // LOCAL PATCH (save states): Save State / Load State in the pause menu close it; the game thread does the rest.
+            if (request == ps2x::ingame::Request::SaveState || request == ps2x::ingame::Request::LoadState)
+            {
+                ps2x::ingame::close();
+                if (m_eeScheduler)
+                    m_eeScheduler->setPaused(false);
+                if (request == ps2x::ingame::Request::SaveState) // (the menu set the slot it shows: ps2_ingame_menu.cpp)
+                    ps2x::savestate::requestSave(ps2x::savestate::currentSlot());
+                else
+                    ps2x::savestate::requestLoad(ps2x::savestate::currentSlot());
+                request = ps2x::ingame::Request::None;
+            }
             if (request == ps2x::ingame::Request::Restart)
                 ps2x::ingame::relaunchGame();
             if (request != ps2x::ingame::Request::None)

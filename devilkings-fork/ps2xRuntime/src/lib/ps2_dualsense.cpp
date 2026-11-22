@@ -241,8 +241,17 @@ namespace
         return writeReport(d, report, 142);
     }
 
+    // LOCAL PATCH (controller stops after a pause): the time of the last report of any kind, and simple Bluetooth reports
+    // (0x01) seen after the full ones had started (the pad dropped back to simple mode: an output report switches it
+    // back). Used by the worker to recover.
+    std::atomic<double> g_anyReportTime{0.0};
+    std::atomic<uint32_t> g_simpleReports{0};
+
     void parseInput(const uint8_t *r, DWORD size, bool bluetooth)
     {
+        g_anyReportTime.store(now(), std::memory_order_relaxed);
+        if (bluetooth && size >= 1 && r[0] == 0x01)
+            g_simpleReports.fetch_add(1u, std::memory_order_relaxed);
         const uint8_t *p = nullptr;
         if (!bluetooth && size >= 11 && r[0] == 0x01)
             p = r + 1;
@@ -332,6 +341,8 @@ namespace
                 }
                 reading = false;
                 sentOnce = false;
+                g_anyReportTime.store(now(), std::memory_order_relaxed);
+                g_simpleReports.store(0u, std::memory_order_relaxed);
             }
 
             // Input: keep one read in flight; take every report that has arrived.
@@ -364,6 +375,29 @@ namespace
             }
             if (d.handle == INVALID_HANDLE_VALUE)
                 continue;
+
+            // LOCAL PATCH (controller stops after a pause): recover a pad that stopped reporting or fell back to the simple
+            // Bluetooth report, instead of leaving the game without input.
+            if (d.bluetooth && sentOnce)
+            {
+                if (g_simpleReports.exchange(0u, std::memory_order_relaxed) > 4u)
+                {
+                    std::fprintf(stderr, "[dualsense] the pad went back to simple reports: switching it to full reports again\n");
+                    sentOnce = false; // the output report below switches it back
+                }
+                const double quiet = now() - g_anyReportTime.load(std::memory_order_relaxed);
+                if (quiet > 1.0)
+                {
+                    std::fprintf(stderr, "[dualsense] no input from the pad for %.1f s: reconnecting\n", quiet);
+                    CancelIo(d.handle);
+                    CloseHandle(d.handle);
+                    d.handle = INVALID_HANDLE_VALUE;
+                    reading = false;
+                    lastTry = -10.0;
+                    g_anyReportTime.store(now(), std::memory_order_relaxed);
+                    continue;
+                }
+            }
 
             // Output: the pulses mixed now.
             const bool enabled = ps2x::settings::getBool("input", "haptics");

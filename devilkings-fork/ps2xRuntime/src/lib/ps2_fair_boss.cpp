@@ -13,6 +13,8 @@
 #include "ps2_runtime_macros.h"
 #include "runtime/ps2_settings.h"
 
+#include <algorithm>
+#include <cstring>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -81,4 +83,22 @@ void ps2xFairBossTalismanBlast(uint8_t *rdram, R5900Context *ctx, PS2Runtime *ru
                          GPR_U32(ctx, 2));
     }
     *ctx = saved;
+}
+
+// LOCAL PATCH (mod): the final boss's health. CEc380 KNOCK_BACK (0x319540) starts the real fight (phase 2): it creates
+// the boss gauge with Hiruko's health at that moment (+0x32C) as the gauge's full length. Just before, the health is set
+// to [game] final_boss_health percent of it (100 = the original), so the gauge starts full and drains in step.
+void ps2xFinalBossHealth(uint8_t *rdram, uint32_t boss)
+{
+    const int percent = std::clamp(ps2x::settings::getNumber("game", "final_boss_health"), 10, 100);
+    if (percent >= 100 || boss == 0u)
+        return;
+    const uint32_t p = (boss & 0x01FFFFFFu) + 0x32Cu;
+    int32_t hp = 0;
+    std::memcpy(&hp, rdram + p, 4u);
+    if (hp <= 1)
+        return;
+    const int32_t reduced = std::max<int32_t>(1, static_cast<int32_t>(static_cast<int64_t>(hp) * percent / 100));
+    std::memcpy(rdram + p, &reduced, 4u);
+    std::fprintf(stderr, "[fair-boss] final boss health %d -> %d (%d %%)\n", hp, reduced, percent);
 }

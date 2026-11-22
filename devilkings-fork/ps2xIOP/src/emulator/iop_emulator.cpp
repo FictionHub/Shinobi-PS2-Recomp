@@ -428,6 +428,17 @@ namespace ps2x::iop::detail
             cpu.gpr[2] = 0u;
         }
 
+        // LOCAL PATCH (performance): the same clamp compiled a second time, unoptimised, at CRI_ADXI+0x5A64 (it is what
+        // the IOP spent ~60% of its time on in a stage). Same in-place clamp; it returns with v0 = 256 (its loop counter).
+        static void adxMixClampToS16Unopt(Impl &impl, CpuState &cpu)
+        {
+            const uint32_t start = cpu.gpr[4];
+            adxMixClampToS16(impl, cpu);
+            cpu.gpr[2] = 0x100u;
+            cpu.gpr[3] = start + 0x400u; // v1, a0: where the loop's pointers end
+            cpu.gpr[4] = start + 0x200u;
+        }
+
         static const std::vector<NativeRoutine> &nativeRoutines()
         {
             static const std::vector<NativeRoutine> s_routines = {
@@ -437,6 +448,16 @@ namespace ps2x::iop::detail
                   0x08000DD2u, 0x24630002u, 0x08000DD0u, 0xA4670000u, 0xA4680000u, 0x24630002u, 0x24840004u,
                   0x24C60001u, 0x2CC20100u, 0x1440FFECu, 0x00000000u, 0x03E00008u, 0x00000000u},
                  256u * 15u + 6u, &Impl::adxMixClampToS16},
+                {"CRI_ADXI", 0x5A64u,
+                 {0x27BDFFF8u, 0xAFBE0000u, 0x03A0F021u, 0xAFC40008u, 0x8FC30008u, 0x8FC40008u, 0x00001021u, 0x2C450100u,
+                  0x14A00003u, 0x00000000u, 0x080016CEu, 0x00000000u, 0x8C650000u, 0x24067FFFu, 0x00C5282Au, 0x10A00005u,
+                  0x00000000u, 0x080016BFu, 0x00000000u, 0x080016BEu, 0x00000000u, 0x8C650000u, 0x00000000u, 0x28A68001u,
+                  0x10C00005u, 0x00000000u, 0x080016C5u, 0x00000000u, 0x080016BEu, 0x00000000u, 0x94650000u, 0x00000000u,
+                  0xA4850000u, 0x24630004u, 0x24840002u, 0x080016CBu, 0x00000000u, 0x00000000u, 0x24057FFFu, 0xA4850000u,
+                  0x24840002u, 0x24630004u, 0x080016CBu, 0x00000000u, 0x24058001u, 0xA4850000u, 0x24840002u, 0x24630004u,
+                  0x080016CBu, 0x00000000u, 0x24420001u, 0x080016A0u, 0x00000000u, 0x03C0E821u, 0x8FBE0000u, 0x27BD0008u,
+                  0x03E00008u, 0x00000000u},
+                 256u * 23u + 14u, &Impl::adxMixClampToS16Unopt},
             };
             return s_routines;
         }
@@ -1238,4 +1259,338 @@ namespace ps2x::iop::detail
         return static_cast<uint32_t>(m_impl->rpc.serverCount());
     }
 
+}
+
+// ---- LOCAL PATCH (save states, GitHub #16) ------------------------------------------------------------------------
+// The IOP state that changes while the game plays: memory (RAM, scratch, hardware registers, allocations, interrupt and
+// DMA state), the kernel's threads and objects, timers, interrupt handlers, the RPC bridge, the CD driver, pending DMA
+// interrupts / guest callbacks, the clocks and the SPU2 (PCSX2's core). Loaded modules, imports and devices are set up
+// at boot and are the same in every session, so they are not written.
+#include "../../../ps2xRuntime/include/runtime/ps2_savestate.h"
+#include "spu2pcsx2/spu2_pcsx2.h"
+
+namespace ps2x::iop::detail
+{
+    struct IopSaveStateAccess
+    {
+        using Writer = ps2x::savestate::Writer;
+        using Reader = ps2x::savestate::Reader;
+
+        template <typename K, typename V, typename M>
+        static void writeMap(Writer &out, const M &map)
+        {
+            out.u32(static_cast<uint32_t>(map.size()));
+            for (const auto &[k, v] : map)
+            {
+                out.pod(static_cast<K>(k));
+                out.pod(static_cast<const V &>(v));
+            }
+        }
+        template <typename K, typename V, typename M>
+        static void readMap(Reader &in, M &map)
+        {
+            map.clear();
+            const uint32_t n = in.u32();
+            for (uint32_t i = 0; i < n && !in.failed(); ++i)
+            {
+                const K k = in.pod<K>();
+                const V v = in.pod<V>();
+                map.emplace(k, v);
+            }
+        }
+
+        static void save(const IopMemory &m, Writer &out)
+        {
+            out.section("iop-memory");
+            out.bytes(m.m_ram);
+            out.bytes(m.m_owned);
+            out.bytes(m.m_scratch);
+            writeMap<uint32_t, uint32_t>(out, m.m_hardware);
+            out.podVector(m.m_allocations);
+            out.u32(m.m_heapCursor);
+            out.u32(m.m_interruptStatus);
+            out.u32(m.m_interruptMask);
+            out.u32(m.m_interruptControl);
+            out.pod(m.m_dmaStart.has_value());
+            out.pod(m.m_dmaStart.value_or(IopMemory::DmaStart{}));
+            out.pod(m.m_spuAutoDma);
+            const Spu2 &s = m.m_spu2;
+            out.pod(s.m_pcsx2);
+            out.pod(s.m_regs);
+            out.u64(s.m_nextSampleCycle);
+            out.pod(s.m_clockStarted);
+            out.podVector(s.m_pendingIrqs);
+            out.u64(s.m_pcsx2Samples);
+            std::vector<uint8_t> core;
+            if (s.m_pcsx2)
+                spu2pcsx2::saveState(core);
+            out.bytes(core);
+        }
+
+        static bool load(IopMemory &m, Reader &in, std::string &error)
+        {
+            if (!in.section("iop-memory"))
+                return false;
+            std::vector<uint8_t> ram = in.bytes(), owned = in.bytes(), scratch = in.bytes();
+            if (ram.size() != m.m_ram.size() || owned.size() != m.m_owned.size() || scratch.size() != m.m_scratch.size())
+            {
+                error = "IOP memory size differs";
+                return false;
+            }
+            // Copied into the live buffers: the SPU2 core, DMA hooks and the EE side hold pointers into them (and into
+            // the hardware register map's entries, which are updated in place for the same reason).
+            std::memcpy(m.m_ram.data(), ram.data(), ram.size());
+            std::memcpy(m.m_owned.data(), owned.data(), owned.size());
+            std::memcpy(m.m_scratch.data(), scratch.data(), scratch.size());
+            {
+                const uint32_t n = in.u32();
+                for (uint32_t i = 0; i < n && !in.failed(); ++i)
+                {
+                    const uint32_t key = in.u32();
+                    m.m_hardware[key] = in.u32();
+                }
+            }
+            in.podVector(m.m_allocations);
+            m.m_heapCursor = in.u32();
+            m.m_interruptStatus = in.u32();
+            m.m_interruptMask = in.u32();
+            m.m_interruptControl = in.u32();
+            const bool hasDma = in.pod<bool>();
+            const IopMemory::DmaStart dma = in.pod<IopMemory::DmaStart>();
+            if (hasDma)
+                m.m_dmaStart = dma;
+            else
+                m.m_dmaStart.reset();
+            in.pod(m.m_spuAutoDma);
+            Spu2 &s = m.m_spu2;
+            const bool pcsx2 = in.pod<bool>();
+            in.pod(s.m_regs);
+            s.m_nextSampleCycle = in.u64();
+            in.pod(s.m_clockStarted);
+            in.podVector(s.m_pendingIrqs);
+            s.m_pcsx2Samples = in.u64();
+            const std::vector<uint8_t> core = in.bytes();
+            if (in.failed())
+                return false;
+            if (pcsx2 != s.m_pcsx2)
+            {
+                error = "the state was saved with the other sound chip setting";
+                return false;
+            }
+            if (pcsx2 && !spu2pcsx2::loadState(core.data(), core.size()))
+            {
+                error = "sound chip state does not match this build";
+                return false;
+            }
+            {
+                // The host's output buffer starts empty again (it held sound from after the save).
+                std::lock_guard<std::mutex> lock(s.m_outputMutex);
+                s.m_outputRead = 0;
+                s.m_outputCount = 0;
+                s.m_playing = false;
+                s.m_resamplePos = 0.0;
+            }
+            return true;
+        }
+
+        static void save(const IopKernel &k, Writer &out)
+        {
+            out.section("iop-kernel");
+            writeMap<int, IopThread>(out, k.m_threads);
+            out.u32(static_cast<uint32_t>(k.m_semaphores.size()));
+            for (const auto &[id, s] : k.m_semaphores)
+                out.pod(s);
+            out.u32(static_cast<uint32_t>(k.m_eventFlags.size()));
+            for (const auto &[id, f] : k.m_eventFlags)
+                out.pod(f);
+            out.u32(static_cast<uint32_t>(k.m_mailboxes.size()));
+            for (const auto &[id, b] : k.m_mailboxes)
+            {
+                out.pod(b.id);
+                out.u32(b.attr);
+                out.u32(b.option);
+                out.podDeque(b.messages);
+            }
+            out.u32(k.m_nextThreadId);
+            out.u32(k.m_nextSemaphoreId);
+            out.u32(k.m_nextEventFlagId);
+            out.u32(k.m_nextMailboxId);
+            out.pod(k.m_currentThread ? k.m_currentThread->id : 0);
+        }
+
+        static bool load(IopKernel &k, Reader &in)
+        {
+            if (!in.section("iop-kernel"))
+                return false;
+            readMap<int, IopThread>(in, k.m_threads);
+            k.m_semaphores.clear();
+            uint32_t n = in.u32();
+            for (uint32_t i = 0; i < n && !in.failed(); ++i)
+            {
+                const auto s = in.pod<IopKernel::Semaphore>();
+                k.m_semaphores[s.id] = s;
+            }
+            k.m_eventFlags.clear();
+            n = in.u32();
+            for (uint32_t i = 0; i < n && !in.failed(); ++i)
+            {
+                const auto f = in.pod<IopKernel::EventFlag>();
+                k.m_eventFlags[f.id] = f;
+            }
+            k.m_mailboxes.clear();
+            n = in.u32();
+            for (uint32_t i = 0; i < n && !in.failed(); ++i)
+            {
+                IopKernel::Mailbox b;
+                in.pod(b.id);
+                b.attr = in.u32();
+                b.option = in.u32();
+                in.podDeque(b.messages);
+                k.m_mailboxes[b.id] = std::move(b);
+            }
+            k.m_nextThreadId = in.u32();
+            k.m_nextSemaphoreId = in.u32();
+            k.m_nextEventFlagId = in.u32();
+            k.m_nextMailboxId = in.u32();
+            const int current = in.pod<int>();
+            auto it = k.m_threads.find(current);
+            k.m_currentThread = (current != 0 && it != k.m_threads.end()) ? &it->second : nullptr;
+            return !in.failed();
+        }
+
+        static void save(const IopTimrman &t, Writer &out)
+        {
+            out.section("iop-timers");
+            out.pod(t.m_timers);
+            out.u32(t.m_holdMode);
+        }
+        static bool load(IopTimrman &t, Reader &in)
+        {
+            if (!in.section("iop-timers"))
+                return false;
+            in.pod(t.m_timers);
+            t.m_holdMode = in.u32();
+            t.m_servicing = false;
+            return !in.failed();
+        }
+
+        static void save(const IopIntrman &t, Writer &out)
+        {
+            out.section("iop-intrman");
+            writeMap<int, IopIntrman::Handler>(out, t.m_handlers);
+            writeMap<int, bool>(out, t.m_enabled);
+        }
+        static bool load(IopIntrman &t, Reader &in)
+        {
+            if (!in.section("iop-intrman"))
+                return false;
+            readMap<int, IopIntrman::Handler>(in, t.m_handlers);
+            readMap<int, bool>(in, t.m_enabled);
+            return !in.failed();
+        }
+
+        static void save(const IopRpcBridge &r, Writer &out)
+        {
+            out.section("iop-rpc");
+            writeMap<uint32_t, IopRpcBridge::RpcServer>(out, r.m_servers);
+            out.u32(r.m_nextDmaId);
+            out.pod(r.m_sifInitialized);
+        }
+        static bool load(IopRpcBridge &r, Reader &in)
+        {
+            if (!in.section("iop-rpc"))
+                return false;
+            readMap<uint32_t, IopRpcBridge::RpcServer>(in, r.m_servers);
+            r.m_nextDmaId = in.u32();
+            in.pod(r.m_sifInitialized);
+            return !in.failed();
+        }
+    };
+
+    bool IopEmulator::saveStateClean(std::string &why) const
+    {
+        const Impl &d = *m_impl;
+        if (d.activeCpu || d.callDepth != 0u || d.servicingDmaInterrupts || d.servicingGuestCallbacks)
+        {
+            why = "the sound processor is busy";
+            return false;
+        }
+        return true;
+    }
+
+    void IopEmulator::saveState(std::vector<uint8_t> &bytes) const
+    {
+        const Impl &d = *m_impl;
+        ps2x::savestate::Writer out;
+        out.section("iop");
+        IopSaveStateAccess::save(d.memory, out);
+        IopSaveStateAccess::save(d.kernel, out);
+        IopSaveStateAccess::save(d.timrman, out);
+        IopSaveStateAccess::save(d.intrman, out);
+        IopSaveStateAccess::save(d.rpc, out);
+        out.section("iop-cdvd");
+        out.pod(d.cdvd.saveState());
+        out.section("iop-core");
+        IopSaveStateAccess::writeMap<int, uint64_t>(out, d.pendingDmaInterrupts);
+        out.u64(d.nextDmaInterruptCycle);
+        out.u32(static_cast<uint32_t>(d.pendingGuestCallbacks.size()));
+        for (const auto &[cycle, cb] : d.pendingGuestCallbacks)
+        {
+            out.u64(cycle);
+            out.pod(cb);
+        }
+        out.u32(d.nextModuleId);
+        out.u32(d.moduleCursor);
+        out.u64(d.totalCycles);
+        out.u64(d.totalInstructions);
+        out.u64(d.eeCycleCarry);
+        out.pod(d.secrMcCommandHandler);
+        out.pod(d.secrMcDevIdHandler);
+        out.pod(d.checkKelfPathCallback);
+        bytes = out.data();
+    }
+
+    bool IopEmulator::loadState(const uint8_t *data, size_t size, std::string &error)
+    {
+        Impl &d = *m_impl;
+        ps2x::savestate::Reader in(data, size);
+        if (!in.section("iop"))
+        {
+            error = in.error();
+            return false;
+        }
+        bool ok = IopSaveStateAccess::load(d.memory, in, error) && IopSaveStateAccess::load(d.kernel, in) &&
+                  IopSaveStateAccess::load(d.timrman, in) && IopSaveStateAccess::load(d.intrman, in) &&
+                  IopSaveStateAccess::load(d.rpc, in) && in.section("iop-cdvd");
+        if (ok)
+        {
+            d.cdvd.loadState(in.pod<IopCdvd::SavedState>());
+            ok = in.section("iop-core");
+        }
+        if (ok)
+        {
+            IopSaveStateAccess::readMap<int, uint64_t>(in, d.pendingDmaInterrupts);
+            d.nextDmaInterruptCycle = in.u64();
+            d.pendingGuestCallbacks.clear();
+            const uint32_t n = in.u32();
+            for (uint32_t i = 0; i < n && !in.failed(); ++i)
+            {
+                const uint64_t cycle = in.u64();
+                d.pendingGuestCallbacks.emplace(cycle, in.pod<Impl::ScheduledGuestCallback>());
+            }
+            d.nextModuleId = in.u32();
+            d.moduleCursor = in.u32();
+            d.totalCycles = in.u64();
+            d.totalInstructions = in.u64();
+            d.eeCycleCarry = in.u64();
+            in.pod(d.secrMcCommandHandler);
+            in.pod(d.secrMcDevIdHandler);
+            in.pod(d.checkKelfPathCallback);
+            d.workNs = 0u;
+            ok = !in.failed();
+        }
+        if (!ok && error.empty())
+            error = in.error().empty() ? "IOP state could not be read" : in.error();
+        return ok;
+    }
 }

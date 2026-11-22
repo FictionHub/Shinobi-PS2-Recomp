@@ -18,6 +18,7 @@
 #include <timeapi.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -62,7 +63,47 @@ namespace
         HANDLE handle = nullptr;
         uint64_t samples = 0;
         std::unordered_map<DWORD64, uint32_t> ripCounts;
+        std::vector<std::array<DWORD64, 6>> stacks; // LOCAL PATCH: PS2X_PROFILE_STACKS=1, [0] = rip
     };
+
+    bool stacksWanted()
+    {
+        static const bool s_on = std::getenv("PS2X_PROFILE_STACKS") != nullptr;
+        return s_on;
+    }
+
+    // Up to 6 frames of a suspended thread (x64 unwind data; no allocation).
+    void unwindFramesUnsafe(CONTEXT &context, DWORD64 *frames)
+    {
+        for (size_t i = 0; i < 6u && context.Rip >= 0x10000u && context.Rsp >= 0x10000u; ++i)
+        {
+            frames[i] = context.Rip;
+            DWORD64 imageBase = 0;
+            PRUNTIME_FUNCTION function = RtlLookupFunctionEntry(context.Rip, &imageBase, nullptr);
+            if (!function)
+            {
+                context.Rip = *reinterpret_cast<DWORD64 *>(context.Rsp);
+                context.Rsp += 8;
+                continue;
+            }
+            void *handlerData = nullptr;
+            DWORD64 establisher = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, context.Rip, function, &context, &handlerData, &establisher, nullptr);
+        }
+    }
+
+    // A frame walk can run off the stack (a frame with no unwind data): stop there instead of crashing.
+    void unwindFrames(CONTEXT context, std::array<DWORD64, 6> &frames)
+    {
+        frames.fill(0);
+        __try
+        {
+            unwindFramesUnsafe(context, frames.data());
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+    }
 
     // Opens every other thread of this process that is not tracked yet. Toolhelp snapshots
     // are slow, so this runs only every few hundred samples.
@@ -141,7 +182,16 @@ namespace
     {
         HANDLE process = GetCurrentProcess();
         SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
-        const bool symbols = SymInitialize(process, nullptr, TRUE) != FALSE;
+        // LOCAL PATCH: the system-stats code may have initialised DbgHelp already (then SymInitialize fails but the symbols
+        // are loaded); only a session started here is cleaned up afterwards.
+        char exePath[MAX_PATH] = {};
+        GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+        std::string exeDir = exePath;
+        if (const size_t slash = exeDir.find_last_of("\\/"); slash != std::string::npos)
+            exeDir.resize(slash);
+        const bool ownSymbols = SymInitialize(process, exeDir.c_str(), TRUE) != FALSE;
+        SymRefreshModuleList(process);
+        const bool symbols = true;
 
         std::unordered_map<DWORD64, std::string> names;
         auto nameOf = [&](DWORD64 rip) -> const std::string &
@@ -165,7 +215,7 @@ namespace
         if (!out)
         {
             std::fprintf(stderr, "[profile] cannot write %s\n", request.path.c_str());
-            if (symbols)
+            if (ownSymbols)
                 SymCleanup(process);
             return;
         }
@@ -195,10 +245,10 @@ namespace
             if (!symbols)
                 continue;
             size_t described = 0;
-            for (size_t i = 0; i < functions.size() && described < 4u; ++i)
+            for (size_t i = 0; i < functions.size() && described < 10u; ++i)
             {
                 if (isWaitFunction(functions[i].first) ||
-                    functions[i].second * 100u < thread->samples) // under 1%
+                    functions[i].second * 200u < thread->samples) // under 0.5%
                     continue;
                 ++described;
                 std::unordered_map<std::string, uint64_t> byLine;
@@ -209,6 +259,23 @@ namespace
                 }
                 std::vector<std::pair<std::string, uint64_t>> lines(byLine.begin(), byLine.end());
                 std::sort(lines.begin(), lines.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
+                if (!thread->stacks.empty())
+                {
+                    std::unordered_map<std::string, uint64_t> byCaller;
+                    for (const auto &frames : thread->stacks)
+                        if (nameOf(frames[0]) == functions[i].first)
+                        {
+                            std::string chain;
+                            for (size_t k = 1; k < 5 && frames[k]; ++k)
+                                chain += (k > 1 ? " < " : "") + nameOf(frames[k]);
+                            byCaller[chain] += 1;
+                        }
+                    std::vector<std::pair<std::string, uint64_t>> callers(byCaller.begin(), byCaller.end());
+                    std::sort(callers.begin(), callers.end(), [](const auto &a, const auto &b) { return a.second > b.second; });
+                    std::fprintf(out, "  callers of %s:\n", functions[i].first.c_str());
+                    for (size_t j = 0; j < callers.size() && j < 6u; ++j)
+                        std::fprintf(out, "      %6llu  %s\n", static_cast<unsigned long long>(callers[j].second), callers[j].first.c_str());
+                }
                 std::fprintf(out, "  lines of %s:\n", functions[i].first.c_str());
                 for (size_t j = 0; j < lines.size() && j < linesShown(); ++j)
                 {
@@ -219,7 +286,7 @@ namespace
             }
         }
         std::fclose(out);
-        if (symbols)
+        if (ownSymbols)
             SymCleanup(process);
         std::fprintf(stderr, "[profile] wrote %s\n", request.path.c_str());
     }
@@ -246,9 +313,14 @@ namespace
                 if (SuspendThread(thread.handle) == static_cast<DWORD>(-1))
                     continue;
                 CONTEXT context{};
-                context.ContextFlags = CONTEXT_CONTROL;
+                context.ContextFlags = stacksWanted() ? CONTEXT_FULL : CONTEXT_CONTROL;
                 const BOOL ok = GetThreadContext(thread.handle, &context);
+                std::array<DWORD64, 6> frames{};
+                if (ok && stacksWanted())
+                    unwindFrames(context, frames);
                 ResumeThread(thread.handle);
+                if (ok && stacksWanted())
+                    thread.stacks.push_back(frames);
                 // Record only after resuming: the sampled thread may hold the heap lock.
                 if (ok)
                 {

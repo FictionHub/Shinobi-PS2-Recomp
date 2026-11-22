@@ -5,12 +5,14 @@
 
 namespace ps2x::iop::detail
 {
+    struct IopSaveStateAccess;
     struct IopCpuState;
     class IopGuestExecutor;
     class IopMemory;
 
     class IopIntrman
     {
+        friend struct IopSaveStateAccess; // LOCAL PATCH (save states): iop_emulator.cpp
     public:
         explicit IopIntrman(IopMemory &memory) noexcept;
 

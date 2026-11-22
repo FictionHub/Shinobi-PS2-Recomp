@@ -43,6 +43,13 @@ namespace ps2x::iop::detail
     void IopImportRegistry::reset()
     {
         m_libraries.clear();
+        clearCaches();
+    }
+
+    void IopImportRegistry::clearCaches() const
+    {
+        m_decodeCache.clear();
+        m_resolveCache.clear();
     }
 
     std::optional<IopImportCall> IopImportRegistry::decode(uint32_t pc) const
@@ -52,6 +59,16 @@ namespace ps2x::iop::detail
         const uint32_t delay = m_memory.read32(pc + 4u);
         if ((delay & 0xFFFF0000u) != 0x24000000u)
             return std::nullopt;
+        if (const auto cached = m_decodeCache.find(pc); cached != m_decodeCache.end() && cached->second.first == delay)
+            return cached->second.second;
+        std::optional<IopImportCall> result = decodeUncached(pc, delay);
+        if (result)
+            m_decodeCache[pc] = {delay, *result};
+        return result;
+    }
+
+    std::optional<IopImportCall> IopImportRegistry::decodeUncached(uint32_t pc, uint32_t delay) const
+    {
 
         const uint32_t physicalPc = IopMemory::physicalAddress(pc);
         const uint32_t searchBegin = physicalPc > 0x10000u ? physicalPc - 0x10000u : 0u;
@@ -124,11 +141,13 @@ namespace ps2x::iop::detail
                 return false;
         }
         m_libraries[physical] = std::move(library);
+        clearCaches();
         return true;
     }
 
     bool IopImportRegistry::releaseExportTable(uint32_t address)
     {
+        clearCaches();
         return m_libraries.erase(IopMemory::physicalAddress(address)) != 0u;
     }
 
@@ -156,10 +175,14 @@ namespace ps2x::iop::detail
 
     uint32_t IopImportRegistry::resolve(std::string_view library, uint16_t ordinal, std::optional<uint16_t> version) const
     {
+        const uint32_t tag = static_cast<uint32_t>(ordinal) | (version ? (static_cast<uint32_t>(*version >> 8u) << 16u) | 0x80000000u : 0u);
+        std::pair<std::string, uint32_t> key{std::string(library), tag};
+        if (const auto cached = m_resolveCache.find(key); cached != m_resolveCache.end())
+            return cached->second;
         const ExportLibrary *found = findLibrary(library, version);
-        if (!found || ordinal >= found->functions.size())
-            return 0u;
-        return found->functions[ordinal];
+        const uint32_t target = (!found || ordinal >= found->functions.size()) ? 0u : found->functions[ordinal];
+        m_resolveCache.emplace(std::move(key), target);
+        return target;
     }
 
     int32_t IopImportRegistry::setRebootTimeLibraryHandlingMode(uint32_t address, uint32_t mode)
@@ -184,6 +207,7 @@ namespace ps2x::iop::detail
 
     void IopImportRegistry::eraseRange(uint32_t base, uint32_t size)
     {
+        clearCaches();
         for (auto library = m_libraries.begin(); library != m_libraries.end();)
         {
             if (library->first >= base && library->first < base + size)

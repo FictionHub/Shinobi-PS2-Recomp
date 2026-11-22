@@ -1,3 +1,4 @@
+#include <vector>
 #include "iop_memory.h"
 
 #include <algorithm>
@@ -408,7 +409,11 @@ namespace ps2x::iop::detail
             return address;
         }
 
-        uint32_t candidate = alignUp(m_heapCursor, alignment);
+        // LOCAL PATCH (GitHub issue #17: sound effects gone after 10-15 Retries): the lowest free gap that fits, as the
+        // IOP's own AllocSysMemory does (mode 0, "first"). This used to start at the highest address ever handed out
+        // (m_heapCursor, which only grows), so freed blocks were never used again: every Retry / stage load put the
+        // sound banks ~22 KB higher until the heap (0x120000..0x1F0000) ran out and the effect bank no longer loaded.
+        uint32_t candidate = alignUp(HeapBase, alignment);
         for (;;)
         {
             bool overlap = false;
@@ -448,7 +453,24 @@ namespace ps2x::iop::detail
 
     uint32_t IopMemory::maxFreeMemory() const
     {
-        return m_heapCursor < HeapLimit ? HeapLimit - m_heapCursor : 0u;
+        // LOCAL PATCH (issue #17): the largest free gap in the heap (freed blocks count again), not just the space above
+        // the highest block ever handed out.
+        std::vector<std::pair<uint32_t, uint32_t>> used;
+        used.reserve(m_allocations.size());
+        for (const auto &block : m_allocations)
+            if (block.address + block.size > HeapBase && block.address < HeapLimit)
+                used.emplace_back(std::max(block.address, HeapBase), std::min(block.address + block.size, HeapLimit));
+        std::sort(used.begin(), used.end());
+        uint32_t largest = 0u, at = HeapBase;
+        for (const auto &[start, end] : used)
+        {
+            if (start > at)
+                largest = std::max(largest, start - at);
+            at = std::max(at, end);
+        }
+        if (HeapLimit > at)
+            largest = std::max(largest, HeapLimit - at);
+        return largest;
     }
 
     std::optional<IopMemory::Allocation> IopMemory::allocationContaining(uint32_t address) const

@@ -179,6 +179,14 @@ namespace ps2x::iop
         m_impl->emulator.setDeferral(minBatchCycles, budgetNanoseconds, maxDeferredCycles);
     }
 
+// LOCAL PATCH (save states, GitHub #16)
+    bool IopSubsystem::saveStateClean(std::string &why) const { return m_impl->emulator.saveStateClean(why); }
+    void IopSubsystem::saveState(std::vector<uint8_t> &out) const { m_impl->emulator.saveState(out); }
+    bool IopSubsystem::loadState(const uint8_t *data, size_t size, std::string &error)
+    {
+        return m_impl->emulator.loadState(data, size, error);
+    }
+
     void IopSubsystem::idleFlush() noexcept
     {
         m_impl->emulator.idleFlush();

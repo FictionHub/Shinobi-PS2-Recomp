@@ -50,6 +50,11 @@ namespace ps2x::iop
         // SPU2 output: up to frames 48 kHz stereo frames; callable from any thread.
         size_t readAudio(int16_t *destination, size_t frames);
 
+        // LOCAL PATCH (save states, GitHub #16): the IOP's state that changes while the game plays.
+        [[nodiscard]] bool saveStateClean(std::string &why) const;
+        void saveState(std::vector<uint8_t> &out) const;
+        [[nodiscard]] bool loadState(const uint8_t *data, size_t size, std::string &error);
+
     private:
         class Impl;
         std::unique_ptr<Impl> m_impl;

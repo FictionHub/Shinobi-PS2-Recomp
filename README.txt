@@ -13,6 +13,24 @@
 
 
 ------------------------------------------------------------------------------
+  WHAT'S NEW IN v0.7
+------------------------------------------------------------------------------
+
+  - Save states, 3 slots: Ctrl+1/2/3 picks a slot, Ctrl+F1 saves, Ctrl+F2 loads
+    (also in the F1 menu). They work after restarting the game too.
+  - Field of View slider (70% to 150%, live) and No camera recentering (Mod Menu).
+  - A PC mouse and keyboard layout (see CONTROLS), the mouse in the game's menus,
+    and mouse buttons you can bind.
+  - Final boss health slider, H = shortcuts panel, Ctrl+R twice = restart.
+  - Fixed: sound effects vanishing after Retry, missing text on the results
+    screen, getting stuck in pits with Infinite health, "Game not found" on a
+    fresh install, DualSense Bluetooth dropouts, and more. Lighter on the CPU.
+
+  IN GAME:  F1 menu   H shortcuts   Ctrl+F1 / Ctrl+F2 save / load state
+            Ctrl+R twice restart   Alt+Enter / F11 window or full screen
+
+
+------------------------------------------------------------------------------
   WHAT'S NEW IN v0.4
 ------------------------------------------------------------------------------
 
@@ -105,17 +123,19 @@ Everything can be changed in the launcher under CONFIGURE CONTROLLER (and in
 the in-game menu, F1).
 
   KEYBOARD (default)
-    D-pad ........ Arrow keys or W A S D
-    Cross ........ X or Space           Circle ....... C or Escape
-    Square ....... Z or Numpad 0        Triangle ..... V or Numpad 1
-    L1 / R1 ...... Q / E                L2 / R2 ...... Left Shift / Right Shift
-    Start ........ Enter                Select ....... Tab
+    Move ......... W A S D              D-pad ........ Arrow keys
+    Jump ......... C (Circle)           Dash ......... Space (Cross)
+    Sword ........ Z (Square)           Shuriken ..... Q (Triangle)
+    Ninjutsu ..... Left Shift (L2)      Next ninjutsu  E (D-pad right)
+    Lock on ...... R (R1)               Next target .. Right Shift (R2)
+    Camera reset . F (L1)               Start/Select . Enter / Tab
     CAMERA (right stick): I = up, K = down, J = left, L = right
 
   MOUSE
-    Moving the mouse turns the camera. Left click = Square (attack),
-    right click = Circle. The pointer stays inside the game window.
-    F10 switches the mouse camera on and off.
+    Moving the mouse turns the camera. Left click = sword, right click = lock
+    on, the wheel = next target, middle click = ninjutsu. In the game's menus:
+    left click selects, right click goes back, the wheel scrolls. The pointer
+    stays inside the game window. F10 switches the mouse camera on and off.
 
   CONTROLLER
     Plug in a gamepad before starting the game. PlayStation (DualSense,
@@ -126,8 +146,12 @@ the in-game menu, F1).
 
   DURING THE GAME
     F1 or Select+Start ... in-game menu (pauses the game)
+    H .................... every shortcut and mod on screen
+    Ctrl+1 / 2 / 3 ....... pick a save state slot
+    Ctrl+F1 / Ctrl+F2 .... save state / load state
+    Ctrl+R twice ......... restart the game
     Alt+Enter or F11 ..... window / full screen
-    F8 ................... mark a problem in the log (for bug reports)
+    Ctrl+F8 .............. mark a problem in the log (for bug reports)
 
 
 ------------------------------------------------------------------------------
@@ -187,9 +211,9 @@ off and hear the music as the game sends it.
   - Screen effects (fog, glow, blur) at high resolutions are not fully checked.
   - The first seconds after starting (logos, intro, loading) run slower.
   - Controllers other than the DualSense Edge are untested.
-  - The left and right mouse buttons are guessed attack buttons.
+  - Rarely, leaving the Extra menu can turn the screen black (being looked at).
 
-Found a bug? Press F8 in the game at the moment it happens, then describe it
+Found a bug? Press Ctrl+F8 in the game at the moment it happens, then describe it
 with the log in  game\captures\last_run.log.
 
 
@@ -200,7 +224,7 @@ with the log in  game\captures\last_run.log.
 The source code is released under the GPL-3.0 (see LICENSE). The source
 repository does not contain the translated game code: that is generated from
 the game's own program file. The downloadable release contains it only inside
-the finished program (bin\Shinobi.zip, unpacked by the launcher by itself); it holds no game data. A step-by-step
+the finished program (bin\Shinobi.pack, unpacked by the launcher by itself); it holds no game data. A step-by-step
 build guide is still to come; the runtime lives in  devilkings-fork\ps2xRuntime.
 
 

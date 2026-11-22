@@ -5,6 +5,7 @@
 #include "runtime/ps2_ingame_menu.h"
 
 #include "runtime/ps2_settings.h"
+#include "runtime/ps2_savestate.h" // LOCAL PATCH (save state slots)
 #include "../launcher/launcher_settings_map.h"
 
 #include <algorithm>
@@ -120,7 +121,12 @@ namespace ps2x::ingame
         {
             std::ostringstream js;
             js << "window.__launcherInit={" << launcher::pageValues(settingGet(), false)
-               << ",music:null,muted:true,ingame:true,manualOnly:" << (g_manualMode ? "true" : "false") << ",restart:" << (ps2x::settings::restartNeeded() ? "true" : "false") << "};";
+               << ",music:null,muted:true,ingame:true,manualOnly:" << (g_manualMode ? "true" : "false") << ",restart:" << (ps2x::settings::restartNeeded() ? "true" : "false");
+            // LOCAL PATCH (save state slots): the picked slot and when each slot was saved ("" = empty)
+            js << ",stateSlot:" << ps2x::savestate::currentSlot() << ",stateSlots:[";
+            for (int slot = 1; slot <= ps2x::savestate::kSlots; ++slot)
+                js << (slot > 1 ? "," : "") << '"' << ps2x::savestate::slotLabel(slot) << '"';
+            js << "]};";
             return js.str();
         }
 
@@ -165,6 +171,15 @@ namespace ps2x::ingame
             }
             else if (command == "quit")
                 g_request = Request::Quit;
+            else if (command == "savestate" || command == "loadstate")
+            {
+                // the slot picked on the page (1..3); the runtime saves / loads ps2x::savestate::currentSlot()
+                if (values.count("slot"))
+                    ps2x::savestate::setCurrentSlot(std::atoi(values["slot"].c_str()));
+                g_request = command == "savestate" ? Request::SaveState : Request::LoadState;
+            }
+            else if (command == "stateslot")
+                ps2x::savestate::setCurrentSlot(std::atoi(values["slot"].c_str()));
             else if (command == "hap")
             {
                 // LOCAL PATCH: menu haptics on the game's own HD haptics (ps2_dualsense.cpp; its switch and strength

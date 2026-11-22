@@ -12,8 +12,18 @@
 #include <vector>
 #include "runtime/ps2_settings.h"
 
+// LOCAL PATCH (GitHub issue #20): a bound key or mouse button (codes from 1000 are mouse buttons, ps2_settings.cpp).
+bool ps2xInGameplay(); // ps2_hud_mod.cpp
+bool ps2xMoviePlaying(uint32_t &width, uint32_t &height); // Kernel/Stubs/MPEG.cpp
+static bool ps2xInputDown(int code)
+{
+    return code >= 1000 ? IsMouseButtonDown(code - 1000) : IsKeyDown(code);
+}
 extern std::atomic<bool> g_ps2MouseLookActive; // Pad.cpp, set by the window loop (ps2_runtime.cpp)
 extern std::atomic<float> g_ps2MouseStickX;
+extern std::atomic<int> g_ps2MouseWheelNotches; // Pad.cpp (LOCAL PATCH: mouse in menus)
+extern std::atomic<bool> g_ps2MouseFakePush;    // ps2_runtime.cpp (LOCAL PATCH: mouse camera)
+bool ps2xMouseAimPending();                       // ps2_runtime.cpp
 extern std::atomic<float> g_ps2MouseStickY;
 
 // LOCAL PATCH (DualSense): src/lib/ps2_dualsense.cpp
@@ -330,6 +340,38 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
             s_altEnter = true;
         else if (!enterDown)
             s_altEnter = false;
+        // LOCAL PATCH (GitHub issue #20): the move keys ([controls] move_up/down/left/right, WASD by default) push only the
+        // left stick. A move key also left on a D-pad button (older settings had "UP,W") no longer presses the D-pad, which
+        // in a stage picks the ninpo scroll.
+        static uint64_t s_moveVersion = ~0ull;
+        static std::vector<int> s_move[4]; // up, down, left, right
+        if (version != s_moveVersion)
+        {
+            static const char *const kMove[4] = {"move_up", "move_down", "move_left", "move_right"};
+            for (int axis = 0; axis < 4; ++axis)
+            {
+                s_move[axis].clear();
+                const std::string list = ps2x::settings::get("controls", kMove[axis]); // WASD by default (ps2_settings.cpp)
+                size_t begin = 0;
+                while (begin <= list.size())
+                {
+                    size_t comma = list.find(',', begin);
+                    if (comma == std::string::npos)
+                        comma = list.size();
+                    if (const int code = ps2x::settings::keyCode(list.substr(begin, comma - begin)))
+                        s_move[axis].push_back(code);
+                    begin = comma + 1;
+                }
+            }
+            s_moveVersion = version;
+        }
+        const auto isMoveKey = [](int key) {
+            for (const auto &keys : s_move)
+                for (int k : keys)
+                    if (k == key)
+                        return true;
+            return false;
+        };
         uint16_t keyboardDirections = 0u;
         for (const auto &[bit, keys] : s_bindings)
         {
@@ -337,13 +379,35 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
             {
                 if (s_altEnter && (key == KEY_ENTER || key == KEY_KP_ENTER))
                     continue;
-                if (IsKeyDown(key))
+                if ((bit & 0x00F0u) && isMoveKey(key))
+                    continue; // a move key: the stick only (below)
+                if (ps2xInputDown(key))
                 {
+                    // LOCAL PATCH (keyboard in menus): Enter is Start while playing (pause), but in menus, the pause
+                    // menu, the title and results it confirms like Cross (submenus only take Cross). During a movie
+                    // it stays Start: Start is what skips a cutscene.
+                    uint32_t movieW = 0u, movieH = 0u;
+                    if (bit == 0x0008u && (key == KEY_ENTER || key == KEY_KP_ENTER) && !ps2xInGameplay() &&
+                        !ps2xMoviePlaying(movieW, movieH))
+                    {
+                        clearBit(0x4000u);
+                        break;
+                    }
                     clearBit(bit);
                     keyboardDirections |= bit;
                     break;
                 }
             }
+        }
+        {
+            static const uint16_t kMoveBits[4] = {0x0010u, 0x0040u, 0x0080u, 0x0020u};
+            for (int axis = 0; axis < 4; ++axis)
+                for (int key : s_move[axis])
+                    if (ps2xInputDown(key))
+                    {
+                        keyboardDirections |= kMoveBits[axis]; // stick direction only: no clearBit (D-pad untouched)
+                        break;
+                    }
         }
         // LOCAL PATCH (GitHub issue #11): the direction keys (WASD and the arrows by default) also push the left stick,
         // which is what moves Hotsuma (the D-pad alone only works in menus). Diagonals are kept at full length.
@@ -390,7 +454,7 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
         const auto held = [](const std::vector<int> &keys)
         {
             for (int key : keys)
-                if (IsKeyDown(key))
+                if (ps2xInputDown(key))
                     return true;
             return false;
         };
@@ -400,10 +464,60 @@ bool PSPadBackend::readState(int /*port*/, int /*slot*/, uint8_t *data, size_t s
         {
             cx += g_ps2MouseStickX.load(std::memory_order_relaxed);
             cy += g_ps2MouseStickY.load(std::memory_order_relaxed);
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
-                clearBit(PAD_SQUARE);
-            if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
-                clearBit(PAD_CIRCLE);
+            // The default clicks (left Square, right Circle) only while that mouse button is not bound to anything in
+            // [controls] (GitHub issue #20: a click bound to Triangle also pressed Square, and the sword won).
+            static uint64_t s_clickVersion = ~0ull;
+            static bool s_leftBound = false, s_rightBound = false, s_middleBound = false;
+            if (const uint64_t v = ps2x::settings::version(); v != s_clickVersion)
+            {
+                s_clickVersion = v;
+                s_leftBound = s_rightBound = s_middleBound = false;
+                for (const ps2x::settings::PadButton &button : ps2x::settings::padButtons())
+                {
+                    const std::string list = ps2x::settings::get("controls", button.key);
+                    s_leftBound = s_leftBound || list.find("MOUSE_LEFT") != std::string::npos;
+                    s_rightBound = s_rightBound || list.find("MOUSE_RIGHT") != std::string::npos;
+                    s_middleBound = s_middleBound || list.find("MOUSE_MIDDLE") != std::string::npos;
+                }
+            }
+            // LOCAL PATCH (mouse in menus): out of play (title, menus, pause menu, results) left click confirms (Cross)
+            // and right click goes back (Circle); the wheel moves the menu cursor (one notch = one D-pad press).
+            // LOCAL PATCH (mouse in play, PC layout): left click = Square (sword), right click = R1 (lock-on), middle
+            // click = L2 (ninjutsu), the wheel = R2 (next target; the game has no "previous", so both directions step
+            // on). Game defaults from GameSystem::InitSystemData / CPlayer::MainControlLockon: lock-on is config 0 (R1),
+            // next target config 6 (R2), ninjutsu L2.
+            const bool menus = !ps2xInGameplay();
+            if (!s_leftBound && IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+                clearBit(menus ? PAD_CROSS : PAD_SQUARE);
+            if (!s_rightBound && IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+                clearBit(menus ? PAD_CIRCLE : PAD_R1);
+            if (!s_middleBound && !menus && IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+                clearBit(PAD_L2);
+            static int s_wheelFrames = 0;
+            static uint16_t s_wheelBit = 0u;
+            static bool s_wheelMenus = true;
+            if (menus != s_wheelMenus)
+            {
+                g_ps2MouseWheelNotches.store(0, std::memory_order_relaxed); // a notch never carries over between the two
+                s_wheelFrames = 0;
+                s_wheelMenus = menus;
+            }
+            if (s_wheelFrames == 0)
+            {
+                const int notches = g_ps2MouseWheelNotches.load(std::memory_order_relaxed);
+                if (notches != 0)
+                {
+                    s_wheelBit = !menus ? PAD_R2 : notches > 0 ? PAD_UP : PAD_DOWN;
+                    g_ps2MouseWheelNotches.fetch_sub(notches > 0 ? 1 : -1, std::memory_order_relaxed);
+                    s_wheelFrames = 12; // 8 reads held, then 4 released, so each notch is a separate press
+                }
+            }
+            if (s_wheelFrames > 0)
+            {
+                if (s_wheelFrames > 4)
+                    clearBit(s_wheelBit);
+                --s_wheelFrames;
+            }
         }
         if (cx != 0.0f || cy != 0.0f)
         {

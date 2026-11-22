@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ps2_runtime.h"
+#include "runtime/ps2_savestate.h"
 
 #include <array>
 #include <atomic>
@@ -79,6 +80,9 @@ struct EeWaitState
     EeWaitReason reason = EeWaitReason::None;
     EeWaitPayload payload{};
     std::function<void(R5900Context &)> completion;
+    // LOCAL PATCH (save states): non-zero when `completion` only sets context.pc to this address, so a save state can
+    // rebuild it (see EeScheduler::waitVSyncResume).
+    uint32_t resumePc = 0;
 };
 
 enum class GuestInvocationKind : uint8_t
@@ -122,6 +126,7 @@ struct GuestThread
     uint32_t tlsBase = 0;
     EeWaitState wait{};
     std::function<void(R5900Context &)> resumeCompletion;
+    uint32_t resumeCompletionPc = 0; // LOCAL PATCH (save states): see EeWaitState::resumePc
     std::vector<GuestInvocation> invocations;
 
     [[nodiscard]] R5900Context &activeContext()
@@ -346,6 +351,14 @@ public:
     uint32_t setGsVSyncCallback(uint32_t callback, uint32_t gp, uint32_t sp);
 
     [[noreturn]] void waitVSync(uint64_t afterTick, int fixedResult = -1, std::function<void(R5900Context &)> completion = {});
+    // LOCAL PATCH (save states): waitVSync whose completion only moves the thread on to resumePc (rebuildable).
+    [[noreturn]] void waitVSyncResume(uint64_t afterTick, int fixedResult, uint32_t resumePc);
+    // LOCAL PATCH (save states, GitHub #16): called on the executor at the top of run(). clean() says whether every
+    // thread can be written (no interrupt handler half way, no closure that cannot be rebuilt); why() names the first
+    // thing that is not.
+    [[nodiscard]] bool saveStateClean(std::string &why) const;
+    void saveState(ps2x::savestate::Writer &out) const;
+    bool loadState(ps2x::savestate::Reader &in);
     void completeVSync(uint64_t tick);
     void completeExternalWait(uint32_t type, uint64_t token, int result);
     [[noreturn]] void waitExternal(EeWaitReason reason, uint32_t type, uint64_t token, std::function<void(R5900Context &)> completion = {});

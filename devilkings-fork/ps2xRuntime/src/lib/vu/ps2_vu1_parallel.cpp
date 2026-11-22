@@ -148,6 +148,20 @@ void VU1Interpreter::Parallel::workerMain()
     ThreadNaming::SetCurrentThreadName("VU1 worker");
     ps2x::sysstats::startProfilerForCurrentThread("VU1 worker");
     uint32_t idle = 0;
+    // LOCAL PATCH (performance): only the first worker spins long between runs; the others spin briefly and sleep (they
+    // are woken by publish()). All of them spinning cost ~16% of a core in a stage, taken from the game on CPUs with
+    // few cores. PS2X_VU1_SPIN=<n> overrides the long spin.
+    static std::atomic<uint32_t> s_workers{0};
+    const uint32_t workerIndex = s_workers.fetch_add(1u, std::memory_order_relaxed);
+    static const uint32_t s_longSpin = []() {
+        const char *v = std::getenv("PS2X_VU1_SPIN");
+        return v ? static_cast<uint32_t>(std::max(0, std::atoi(v))) : 4096u;
+    }();
+    static const uint32_t s_shortSpin = []() {
+        const char *v = std::getenv("PS2X_VU1_SPIN_OTHERS");
+        return v ? static_cast<uint32_t>(std::max(0, std::atoi(v))) : 256u;
+    }();
+    const uint32_t spinLimit = workerIndex == 0u ? s_longSpin : s_shortSpin;
     while (!stop.load(std::memory_order_acquire))
     {
         if (takeRedo() || takeAndRun())
@@ -156,7 +170,7 @@ void VU1Interpreter::Parallel::workerMain()
             continue;
         }
         // Runs come in bursts (one per MSCAL/MSCNT of a chain): spin a little before sleeping.
-        if (++idle < 4096u)
+        if (++idle < spinLimit)
         {
             pause();
             continue;

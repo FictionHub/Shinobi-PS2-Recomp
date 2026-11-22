@@ -15,9 +15,12 @@ namespace launcher
             const char *key;
             const char *fallback; // the game's default (ps2_settings.cpp)
         };
-        const Bind kBinds[] = {{"up", "UP,W"},       {"down", "DOWN,S"},     {"left", "LEFT,A"},   {"right", "RIGHT,D"},
-                               {"cross", "X,SPACE"}, {"circle", "C,ESCAPE"}, {"square", "Z,KP_0"}, {"triangle", "V,KP_1"},
-                               {"l1", "Q"},          {"r1", "E"},            {"l2", "LEFT_SHIFT"}, {"r2", "RIGHT_SHIFT"},
+        // GitHub issue #20: WASD moves (left stick only, move_*); the D-pad is the arrow keys.
+        // 0.7 PC layout: Q shuriken, E next ninjutsu, R lock-on, F camera reset (same as ps2_settings.cpp).
+        const Bind kBinds[] = {{"up", "UP"},         {"down", "DOWN"},       {"left", "LEFT"},     {"right", "RIGHT,E"},
+                               {"move_up", "W"},     {"move_down", "S"},     {"move_left", "A"},   {"move_right", "D"},
+                               {"cross", "X,SPACE"}, {"circle", "C,ESCAPE"}, {"square", "Z,KP_0"}, {"triangle", "Q,V,KP_1"},
+                               {"l1", "F"},          {"r1", "R"},            {"l2", "LEFT_SHIFT"}, {"r2", "RIGHT_SHIFT"},
                                {"start", "ENTER"},   {"select", "TAB"},
                                {"camera_up", "I"},   {"camera_down", "K"},   {"camera_left", "J"}, {"camera_right", "L"}};
         // LOCAL PATCH (controller remapping): the game buttons; [controls] pad_<name> = the controller button that presses it.
@@ -104,8 +107,10 @@ namespace launcher
            << ",scol:" << b(truthy(get("game", "scarf_collision", "false")))
            << ",noscarf:" << b(truthy(get("game", "hide_scarf", "false")))
            << ",nohunger:" << b(truthy(get("game", "no_sword_hunger", "false")))
+           << ",norecenter:" << b(truthy(get("game", "no_camera_recenter", "false")))
            << ",unlockall:" << b(truthy(get("game", "unlock_all", "false")))
            << ",fairboss:" << b(truthy(get("game", "fair_final_boss", "true")))
+           << ",bosshp:'" << get("game", "final_boss_health", "50") << "'"
            << ",infhealth:" << b(truthy(get("game", "infinite_health", "false")))
            << ",hdtex:" << b(truthy(get("video", "hd_textures", "true")))
            << ",dumptex:" << b(truthy(get("video", "dump_textures", "false")))
@@ -113,6 +118,7 @@ namespace launcher
            << ",lowlat:" << b(truthy(get("video", "low_latency", "true")))
            << ",fgt:" << jsonString(get("video", "framegen_target", "monitor"))
            << ",vol:" << jsonString(get("audio", "volume", "100"))
+           << ",fov:" << jsonString(get("video", "fov", "100")) // LOCAL PATCH (issue #23)
            << ",lvoice:" << jsonString(get("language", "voice", "en"))   // LOCAL PATCH: Languages
            << ",ltext:" << jsonString(get("language", "text", "en"))
            << ",euDisc:" << jsonString(get("language", "eu_disc", ""))
@@ -199,8 +205,10 @@ namespace launcher
             set("game", "scarf_collision", b(get("scol", "0") == "1"));
             set("game", "hide_scarf", b(get("noscarf", "0") == "1"));
             set("game", "no_sword_hunger", b(get("nohunger", "0") == "1"));
+            set("game", "no_camera_recenter", b(get("norecenter", "0") == "1"));
             set("game", "unlock_all", b(get("unlockall", "0") == "1"));
             set("game", "fair_final_boss", b(get("fairboss", "1") == "1"));
+            set("game", "final_boss_health", get("bosshp", "50"));
             set("game", "infinite_health", b(get("infhealth", "0") == "1"));
             set("video", "hd_textures", b(get("hdtex", "1") == "1"));
             set("video", "dump_textures", b(get("dumptex", "0") == "1"));
@@ -210,6 +218,9 @@ namespace launcher
                 // LOCAL PATCH (issue #7): the game's volume, 0..100.
                 const int vol = std::atoi(get("vol", "100").c_str());
                 set("audio", "volume", std::to_string(std::clamp(vol, 0, 100)));
+                // LOCAL PATCH (GitHub issue #23): field of view, 70..150 %.
+                const int fov = std::atoi(get("fov", "100").c_str());
+                set("video", "fov", std::to_string(std::clamp(fov == 0 ? 100 : fov, 70, 150)));
                 // LOCAL PATCH: Languages (the European disc's path is set by its own Choose button, not here).
                 const auto langCode = [](const std::string &c) {
                     return (c == "ja" || c == "fr" || c == "de" || c == "it" || c == "es") ? c : std::string("en");

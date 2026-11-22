@@ -576,6 +576,7 @@ public:
     };
 
     std::array<EeTimer, 4> m_eeTimers{};
+    uint32_t *m_gifStatEntry = nullptr; // LOCAL PATCH (performance): GIF_STAT's value in m_ioRegisters, once it exists
     bool tryProcessScratchpadDma(uint32_t channelBase, uint32_t chcr);
     bool tryProcessIpuInputDma(uint32_t channelBase, uint32_t chcr);
     void appendIpuDmaData(std::vector<uint8_t> &payload, uint32_t srcAddr, uint32_t qwCount);

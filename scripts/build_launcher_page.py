@@ -307,6 +307,24 @@ template = must_replace(template, '<span>Shinobi (PS2 Recom) Launcher - by TheRe
 template = must_replace(template, '<h2>Shinobi - PS2 Recompilation</h2>', '<h2>{{cardTitle}}</h2>')
 template = re.sub(r'<p>Ignite the fiery vengeance.*?</p>', '<p>{{cardText}}</p>', template, count=1, flags=re.S)
 template = must_replace(template, '<button class="btn" sc-camel-on-click="{{openCredits}}"><span class="lab">Credits</span></button>',
+                        # LOCAL PATCH (save states, GitHub #16): in the game's pause menu only.
+                        # three slots (Ctrl+1/2/3 in game): pick one, then save / load it
+                        '<div style="{{stateSlotsStyle}}">'
+                        '<b style="font-size:12px;letter-spacing:.08em;flex:0 0 auto">SLOT</b>'
+                        '<div class="segs" role="group" aria-label="Save state slot" style="flex:0 0 auto">'
+                        '<sc-for list="{{stateSlotChips}}" as="t" hint-placeholder-count="3">'
+                        '<button class="seg {{t.cls}}" style="min-width:30px;white-space:nowrap" aria-pressed="{{t.on}}" title="{{t.tip}}" '
+                        'sc-camel-on-click="{{t.pick}}">{{t.name}}</button>'
+                        '</sc-for></div>'
+                        '<small style="flex:1 1 auto;min-width:0;opacity:.75;font-size:11.5px;white-space:nowrap;overflow:hidden;'
+                        'text-overflow:ellipsis">{{stateSlotText}}</small>'
+                        '</div>'
+                        '<div style="{{stateRowStyle}}">'
+                        '<button class="btn" style="flex:1 1 0;min-width:0" title="Save the game exactly where you are, in the slot above (Ctrl+F1)" '
+                        'sc-camel-on-click="{{saveStateBtn}}"><span class="lab">Save State</span></button>'
+                        '<button class="btn" style="flex:1 1 0;min-width:0" title="Back to where you saved in the slot above (Ctrl+F2)" '
+                        'sc-camel-on-click="{{loadStateBtn}}"><span class="lab">Load State</span></button>'
+                        '</div>'
                         '<div style="display:flex;gap:8px">'
                         '<button class="btn" style="flex:1 1 0;min-width:0" title="The game manual (your own PDF), turned like a book" '
                         'sc-camel-on-click="{{openManual}}"><span class="lab">Manual</span></button>'
@@ -320,6 +338,14 @@ template = must_replace(template, '<button class="btn sm" sc-camel-on-click="{{r
 
 # Mod Menu: Hotsuma's scarf colour (settings [game] scarf_color, ps2_scarf_colour.cpp), above the switches.
 template = must_replace(template, '<sc-for list="{{modRows}}" as="m" hint-placeholder-count="4">',
+                        # LOCAL PATCH: Mod Menu pages (Look / Camera / Gameplay / Controller / Start-up / Advanced),
+                        # switched like the settings pages.
+                        '<div class="tabs tabnav modnav" role="tablist" aria-label="Mod Menu pages">'
+                        '<button class="tnav" aria-label="Previous mod page" sc-camel-on-click="{{modTabPrev}}"><b class="kh">{{tabHintL}}</b><span class="ar">&#8249;</span></button>'
+                        '<div class="mtabs"><sc-for list="{{modTabOpts}}" as="t" hint-placeholder-count="6">'
+                        '<button class="mtab {{t.cls}}" role="tab" aria-selected="{{t.on}}" sc-camel-on-click="{{t.pick}}"><span>{{t.name}}</span></button></sc-for></div>'
+                        '<button class="tnav" aria-label="Next mod page" sc-camel-on-click="{{modTabNext}}"><span class="ar">&#8250;</span><b class="kh">{{tabHintR}}</b></button></div>'
+                        '<sc-if value="{{modTabLook}}" hint-placeholder-val="{{true}}">'
                         '<div class="mrow scarfrow">'
                         '<div><b>Scarf colour</b><span>{{scarfDesc}}</span></div>'
                         '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;max-width:260px">'
@@ -330,12 +356,23 @@ template = must_replace(template, '<sc-for list="{{modRows}}" as="m" hint-placeh
                         '<input type="color" style="width:30px;height:24px;padding:0;border:1px solid #888;border-radius:4px;background:none;cursor:pointer" value="{{scarfHex}}" title="Any colour" aria-label="Pick any scarf colour" '
                         'sc-camel-on-change="{{scarfPick}}">'
                         '</div></div>'
+                        '</sc-if>'
                         # LOCAL PATCH: haptic strength (settings [input] haptic_strength), live in the game
+                        '<sc-if value="{{modTabPad}}" hint-placeholder-val="{{false}}">'
                         '<div class="mrow scarfrow"><div><b>Haptic strength</b><span>How strong the DualSense haptics feel: {{hapStrName}}.</span></div>'
                         '<div class="segs" style="flex:0 0 auto" role="group" aria-label="Haptic strength">'
                         '<sc-for list="{{hapChips}}" as="h" hint-placeholder-count="4">'
                         '<button class="seg {{h.cls}}" aria-pressed="{{h.on}}" sc-camel-on-click="{{h.pick}}">{{h.name}}</button>'
                         '</sc-for></div></div>'
+                        '</sc-if>'
+                        # LOCAL PATCH: final boss health (settings [game] final_boss_health), Gameplay page
+                        '<sc-if value="{{modTabGameplay}}" hint-placeholder-val="{{false}}">'
+                        '<div class="mrow scarfrow"><div><b>Final boss health</b><span>Hiruko\'s health in the real fight: {{bossHpName}}</span></div>'
+                        '<div class="segs" style="flex:0 0 auto" role="group" aria-label="Final boss health">'
+                        '<sc-for list="{{bossHpChips}}" as="h" hint-placeholder-count="4">'
+                        '<button class="seg {{h.cls}}" aria-pressed="{{h.on}}" sc-camel-on-click="{{h.pick}}">{{h.name}}</button>'
+                        '</sc-for></div></div>'
+                        '</sc-if>'
                         '<sc-for list="{{modRows}}" as="m" hint-placeholder-count="4">')
 
 
@@ -373,7 +410,13 @@ template = template[:_m.start()] + (
     '        </div>\n') + template[_m.start():]
 _m = re.search(r'\n\s*<div>\s*<div class="fl"[^>]*><span>Texture Quality', template)
 assert _m, 'texture anchor'
-template = template[:_m.start()] + '\n        </sc-if>\n        <sc-if value="{{tabGraphics}}" hint-placeholder-val="{{false}}">' + template[_m.start():]
+template = template[:_m.start()] + '\n        </sc-if>\n        <sc-if value="{{tabGraphics}}" hint-placeholder-val="{{false}}">' + (
+    # LOCAL PATCH (GitHub issue #23): Field of view slider (70..150 %, 100 = the original view; live in game)
+    '\n        <div>\n'
+    '          <div class="fl" title="How much of the world the camera shows. 100% is the original view."><span>Field of View</span><em>{{fovName}}</em></div>\n'
+    '          <div class="rng"><div class="trk" style="background: {{fovBg}}"></div><input type="range" min="70" max="150" step="5" '
+    'value="{{fovNum}}" sc-camel-on-change="{{setFov}}" aria-label="Field of view"></div>\n'
+    '        </div>') + template[_m.start():]
 _m = re.search(r'\n\s*<div class="act">', template)
 assert _m, 'act anchor'
 template = template[:_m.start()] + (
@@ -396,6 +439,17 @@ template = template[:_m.start()] + (
     '        </sc-if>') + template[_m.start():]
 css_tabs = ('html.manual-only body>*:not([role=dialog]){visibility:hidden!important}html body .pad-focus.pad-focus.pad-focus{outline:3px solid #ff1f3d!important;outline-offset:-3px!important;box-shadow:inset 0 0 14px rgba(255,31,61,.55),0 0 14px rgba(255,31,61,.7)!important;position:relative;z-index:2}.tabs{margin:0 0 6px;flex-shrink:0}.grp label.chk{height:26px!important;min-height:0!important}.tabs .seg{flex:1 1 auto;min-width:0;padding-left:6px!important;padding-right:6px!important;font-size:12.5px!important;letter-spacing:0!important}html.tabbed .grp>*{animation:none!important;opacity:1!important}.segs:not(.tabs):has(.seg:nth-of-type(6)) .seg{font-size:13px!important;padding-left:2px!important;padding-right:2px!important;letter-spacing:0!important;white-space:nowrap}'
             '.grp>sc-if>div,.grp sc-if>div{margin-bottom:2px}')
+# LOCAL PATCH: Mod Menu pages: the dialog keeps one size on every page, the page bar stays at the top while scrolling.
+css_tabs += '.db:has(.modnav){min-height:min(430px,52vh)}.modnav{position:sticky;top:0;z-index:3;background:#0c0c0d;margin-bottom:6px}'
+# Mod Menu page bar: every page's name side by side, slanted tabs overlapping their neighbours, the current one raised.
+css_tabs += ('.modnav{grid-template-columns:auto minmax(0,1fr) auto}.modnav .tnav{flex:0 0 auto;position:relative;z-index:4}.modnav .mtabs{display:flex;justify-content:center;align-items:center;padding:4px 8px;min-width:0}'
+             '.modnav .mtab{position:relative;margin:0 -5px;padding:7px 12px;background:#18181b;border:1px solid #34343a;color:#8b8b92;'
+             'font:inherit;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;cursor:pointer;'
+             'transform:skewX(-14deg);transition:transform .2s cubic-bezier(.2,.8,.3,1),background .2s,color .2s,box-shadow .2s;z-index:1}'
+             '.modnav .mtab>span{display:inline-block;transform:skewX(14deg)}'
+             '.modnav .mtab:hover{color:#e6e6e6;background:#222226;z-index:2}'
+             '.modnav .mtab.on{margin:0 3px;background:#f2f2f2;color:#0b0b0c;border-color:#fff;z-index:3;transform:skewX(-14deg) scale(1.05);'
+             'box-shadow:0 6px 18px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.35)}')
 template = must_replace(template, '@media (prefers-reduced-motion:reduce)', css_tabs + '@media (prefers-reduced-motion:reduce)')
 
 
@@ -588,17 +642,19 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
 # ---- LOCAL PATCH: the Feature Set page: everything the recomp does now, and what is planned. Edit the lists here. ----
 FEATURES_NOW = [
     ('Graphics', [
+        ('Field of View slider (#23)', ''),
         ('Up to 4K and 8K resolution (D3D11 or Vulkan)', ''),
         ('Widescreen: 16:9, 21:9, 32:9 and Auto', ''),
         ('IMAX mode: no bars, even in movies', 'F7'),
         ('HD texture packs, switched live', 'Shift+F5'),
-        ('HD Texture Pack v1: free separate download', ''),
+        ('HD Texture Pack v2: 372 textures', ''),
         ('FXAA, Edge AA, sharpening, anisotropic filtering', ''),
         ('Screen filters: Sharp, Smooth, Scanlines, CRT', ''),
         ('Dithering, mipmapping and upscaling fixes', ''),
         ('Picture centred, no black strip', ''),
     ]),
     ('Performance', [
+        ('Lighter on the CPU', ''),
         ('Runs natively as PC code, not emulated', ''),
         ('Frame generation up to 360 FPS', 'F4'),
         ('Low latency mode', 'F6'),
@@ -619,6 +675,12 @@ FEATURES_NOW = [
         ('Dubbed movies and subtitles', ''),
     ]),
     ('Controls', [
+        ('PC mouse and key layout', ''),
+        ('Mouse in game menus', ''),
+        ('Separate move keys (#20)', ''),
+        ('Bindable mouse buttons (#20)', ''),
+        ('Enter in every menu', ''),
+        ('DualSense Bluetooth reconnect', ''),
         ('DualSense HD haptics over USB or Bluetooth', ''),
         ('L2 adaptive trigger for ninja magic', ''),
         ('Haptics switch and strength in the Mod Menu', ''),
@@ -629,6 +691,8 @@ FEATURES_NOW = [
         ('PlayStation, Xbox and Nintendo pads detected', ''),
     ]),
     ('Mods', [
+        ('No camera recentering (#22)', ''),
+        ('Final boss health slider', ''),
         ('Fair final boss', 'F9'),
         ('Infinite health', 'F8'),
         ('Uncursed Sword: no sword hunger', 'Shift+F7'),
@@ -639,6 +703,11 @@ FEATURES_NOW = [
         ('Skip the start-up logos', ''),
     ]),
     ('Launcher', [
+        ('Save states, 3 slots (#16)', 'Ctrl+F1'),
+        ('Save / Load in F1 menu', ''),
+        ('Restart the game', 'Ctrl+R x2'),
+        ('Shortcuts panel', 'H'),
+        ('Mod Menu with category tabs', ''),
         ('Sets the game up from your own disc image', ''),
         ('Automatic updates', ''),
         ('In-game menu with every setting live', 'F1'),
@@ -651,27 +720,42 @@ FEATURES_NOW = [
 ]
 # LOCAL PATCH: new in this version: these rows get gold sparks and a NEW tag on the Feature Set page.
 FEATURES_NEW = {
-    'IMAX mode: no bars, even in movies',
-    'Picture centred, no black strip',
-    'Steady frame pacing at high frame rates',
-    'Shaders cached for fast starts',
-    'Streamed music and movies in true stereo',
-    'Game volume',
-    'Jukebox: your music for all 30 tracks',
-    'Your own launcher music',
-    'Japanese voices and text, from your US disc',
-    'French, German, Italian, Spanish (EU disc)',
-    'Dubbed movies and subtitles',
-    'Haptics switch and strength in the Mod Menu',
-    'Menu haptics: taps and scrolling beads',
-    'WASD movement and 1:1 mouse aiming',
-    'PlayStation, Xbox and Nintendo pads detected',
-    'Rebuilt launcher: boot screen, theme, pages',
-    'HD Texture Pack v1: free separate download',
+    'Field of View slider (#23)',
+    'HD Texture Pack v2: 372 textures',
+    'Lighter on the CPU',
+    'PC mouse and key layout',
+    'Mouse in game menus',
+    'Separate move keys (#20)',
+    'Bindable mouse buttons (#20)',
+    'Enter in every menu',
+    'DualSense Bluetooth reconnect',
+    'No camera recentering (#22)',
+    'Final boss health slider',
+    'Save states, 3 slots (#16)',
+    'Save / Load in F1 menu',
+    'Restart the game',
+    'Shortcuts panel',
+    'Mod Menu with category tabs',
 }
+# LOCAL PATCH: fixed in this version (text, tag: a GitHub issue number or '' for FIXED). Shown between "Available now"
+# and "Coming in future updates".
+FEATURES_FIXED = [
+    ('Sound effects lost after about 10 Retries', '#17'),
+    ('"Game not found" on a fresh install', '#13'),
+    ('RecompLauncher / Wine setup failing', '#15'),
+    ('Mouse camera barely turned', '#20'),
+    ('WASD changed the ninjutsu scroll', '#20'),
+    ('Mouse clicks pressing two buttons', '#20'),
+    ('Blue line in the 7-A boss cutscene', '#18'),
+    ('Missing rank text on stage results', ''),
+    ('Stuck in pits with Infinite health on', ''),
+    ('Enter only worked in the main menu', ''),
+    ('DualSense Bluetooth dropouts', ''),
+    ('D-pad on the launcher Graphics page', ''),
+    ('Black boxes in the HD texture tool', ''),
+]
 FEATURES_SOON = [
     'IMAX for in-game (non-movie) cutscenes',
-    'Save states',
     '4K on Vulkan fixes (intro, pause menu)',
     '21:9 effect fixes (smoke, blood, kanji)',
     'More HD textures with every update',
@@ -704,6 +788,10 @@ def _features_html():
             else:
                 out.append('            <div class="frow"><i></i><span>%s</span>%s</div>\n' % (_h.escape(text), kbd))
     assert nnew == len(FEATURES_NEW), 'a FEATURES_NEW row is not in FEATURES_NOW'
+    out.append('            <div class="fhead soon"><span>Fixed in this version</span></div>\n')
+    for text, tag in FEATURES_FIXED:
+        out.append('            <div class="frow ffix"><i></i><span>%s</span><em>%s</em></div>\n'
+                   % (_h.escape(text), _h.escape(tag or 'FIXED')))
     out.append('            <div class="fhead soon"><span>Coming in future updates</span></div>\n')
     for text in FEATURES_SOON:
         out.append('            <div class="frow fsoon"><i></i><span>%s</span><em>SOON</em></div>\n' % _h.escape(text))
@@ -747,6 +835,8 @@ template = must_replace(template, '@media (prefers-reduced-motion:reduce)',
     'animation:fshine 3s linear infinite}'
     '@keyframes fshine{0%{background-position:100% 0}100%{background-position:-100% 0}}'
     '.frow.fsoon{color:#9a9aa2}.frow.fsoon i{background:#55555c;box-shadow:none}'
+    '.frow.ffix i{background:#5fd38a;box-shadow:0 0 5px rgba(95,211,138,.6)}'
+    '.frow.ffix em{color:#5fd38a;border-color:rgba(95,211,138,.5)}'
     '.frow em{flex:none;font-style:normal;font-family:Rajdhani,sans-serif;font-weight:700;font-size:10px;letter-spacing:.14em;'
     'padding:1px 6px;border-radius:3px;color:#ffc935;border:1px solid rgba(255,201,53,.5)}'
     '@media (prefers-reduced-motion:reduce)')
@@ -949,7 +1039,7 @@ L("""    this.defaults = { res: '1080p', renderer: 'Vulkan', ws: true, vsync: fa
     });""",
   """    // Defaults: the game's own (ps2_settings.cpp) where it has them.
     this.defaults = { res: '1440p', renderer: 'D3D11', fps: '60', ws: true, wsShape: '16:9', vsync: true, tex: 1, fx: 1, aa: 'FXAA', msaa: 4, blend: 'basic' };
-    this.defBinds = { up: 'UP,W', down: 'DOWN,S', left: 'LEFT,A', right: 'RIGHT,D', cross: 'X,SPACE', circle: 'C,ESCAPE', square: 'Z,KP_0', triangle: 'V,KP_1', l1: 'Q', r1: 'E', l2: 'LEFT_SHIFT', r2: 'RIGHT_SHIFT', start: 'ENTER', select: 'TAB' };
+    this.defBinds = { up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT,E', cross: 'X,SPACE', circle: 'C,ESCAPE', square: 'Z,KP_0', triangle: 'Q,V,KP_1', l1: 'F', r1: 'R', l2: 'LEFT_SHIFT', r2: 'RIGHT_SHIFT', start: 'ENTER', select: 'TAB' };
     this.defMods = { studio: false, nscale: true, rr5fix: false, dropst: false, record: false, intro: true, fastvu: false, dbg: false, full: true, diag: false, legacy: false, k8: false };
     const init = window.__launcherInit || null;
     this.manualOnly = !!(init && init.manualOnly);
@@ -970,6 +1060,9 @@ L("""    this.defaults = { res: '1080p', renderer: 'Vulkan', ws: true, vsync: fa
     this.ingame = !!(init && init.ingame);
     this.state.restart = !!(init && init.restart);
     this.state.quitArmed = false;
+    // LOCAL PATCH (save state slots): the slot the game has picked, and when each slot was saved ('' = empty).
+    this.state.stateSlot = (init && init.stateSlot) || 1;
+    this.stateSlots = (init && init.stateSlots) || ['', '', ''];
     document.documentElement.classList.toggle('ingame', this.ingame);
     // LOCAL PATCH: the boot screen. About 2 s of a retro LOADING bar (gold, in steps), then it fades away and the
     // page's own intro animations start from the beginning (they wait, paused, under it). Not in the F1 menu.
@@ -1353,7 +1446,57 @@ L("""  sig(s) {""",
     setTimeout(() => { if (!document.contains(this.navCurrent)) this.navMove(0); }, 0);
   }
 
+  // LOCAL PATCH: the Feature Set list scrolls itself slowly and loops (pause at the end, glide back to the top).
+  // Any touch pauses it (mouse over the list, wheel, keys, the controller); it carries on 4 s after the last one.
+  featureAutoScroll() {
+    const SPEED = 16;          // px per second
+    const HOLD = 2200;         // ms held at the top and at the end
+    const IDLE = 4000;         // ms after the last touch before it carries on
+    this._userT = 0;
+    ['wheel', 'pointerdown', 'keydown', 'touchstart'].forEach((ev) => document.addEventListener(ev, () => { this._userT = performance.now(); }, { passive: true }));
+    let last = performance.now(), hold = performance.now() + 3500, pos = null, phase = 'down';
+    const step = (now) => {
+      requestAnimationFrame(step);
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const list = document.querySelector('.flist');
+      if (!list || list.scrollHeight <= list.clientHeight + 4) { pos = null; return; }
+      const touched = Math.max(this._userT || 0, this._padT || 0, this._hostRsyT || 0);
+      if (list.matches(':hover') || list.classList.contains('pad-focus') || now - touched < IDLE) { pos = null; hold = now + 600; return; }
+      if (pos === null) pos = list.scrollTop;     // carry on from wherever the player left it
+      if (now < hold) return;
+      const end = list.scrollHeight - list.clientHeight;
+      if (phase === 'down') {
+        pos = Math.min(end, pos + SPEED * dt);
+        list.scrollTop = pos;
+        if (pos >= end - 0.5) { phase = 'up'; hold = now + HOLD; }
+      } else {
+        pos = Math.max(0, pos - Math.max(60, pos * 2.2) * dt);   // a quick glide back to the top
+        list.scrollTop = pos;
+        if (pos <= 0.5) { phase = 'down'; hold = now + HOLD; }
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
   navSetup() {
+    this.featureAutoScroll();
+    // LOCAL PATCH (GitHub issue #20): mouse buttons can be bound on the Keyboard page. While a key is being bound, a
+    // mouse button (left, middle, right, 4, 5) is taken as the binding; its click does nothing else.
+    document.addEventListener('mousedown', (e) => {
+      const s = this.state;
+      if (!s || !s.listening || s.device !== 'keyboard') return;
+      const name = ['MOUSE_LEFT', 'MOUSE_MIDDLE', 'MOUSE_RIGHT', 'MOUSE_4', 'MOUSE_5'][e.button];
+      if (!name) return;
+      e.preventDefault(); e.stopPropagation();
+      const bind = Object.assign({}, s.bind);
+      Object.keys(bind).forEach((k) => { if (bind[k] === name) bind[k] = 'None'; });
+      bind[s.listening] = name;
+      this._eatClick = true;
+      this.setState({ bind: bind, listening: null });
+    }, true);
+    document.addEventListener('click', (e) => { if (this._eatClick) { this._eatClick = false; e.preventDefault(); e.stopPropagation(); } }, true);
+    document.addEventListener('auxclick', (e) => { if (this._eatClick) { this._eatClick = false; e.preventDefault(); e.stopPropagation(); } }, true);
     document.addEventListener('keydown', (e) => {
       if (this.state && this.state.listening) return; // binding a key in Configure Controller
       const k = e.key;
@@ -1507,10 +1650,41 @@ L("""  sig(s) {
 
   // LOCAL PATCH: settings pages, one at a time: L1 / R1 (LB / RB, Q / E, the arrows) step through them in order.
   navTab(d) {
+    if (this.state.modal === 'mods') { this.navModTab(d); return; }
     if (document.querySelector('.dlg')) return;
     const ids = ['display', 'graphics', 'effects', 'perf', 'jukebox', 'languages', 'controller', 'features'];
     const i = Math.max(0, ids.indexOf(this.state.tab || 'display'));
     this.tabGo(ids[(i + d + ids.length) % ids.length], d);
+  }
+
+  // LOCAL PATCH: the Mod Menu's pages, stepped and animated like the settings pages.
+  navModTab(d) {
+    const ids = window.MOD_TABS.map((t) => t[0]);
+    const i = Math.max(0, ids.indexOf(this.state.modTab || 'look'));
+    this.modTabGo(ids[(i + d + ids.length) % ids.length], d);
+  }
+
+  modTabGo(id, d) {
+    const ids = window.MOD_TABS.map((t) => t[0]);
+    const cur = this.state.modTab || 'look';
+    if (!id || id === cur) return;
+    if (d === undefined) d = ids.indexOf(id) > ids.indexOf(cur) ? 1 : -1;
+    this.setState({ modTab: id });
+    this.hap('tab');
+    requestAnimationFrame(() => {
+      const nav = document.querySelector('.modnav');
+      if (!nav || !nav.animate) return;
+      const slide = (px, blur) => [
+        { opacity: 0, transform: 'translateX(' + px + 'px)', filter: 'blur(' + blur + 'px)' },
+        { opacity: 1, transform: 'translateX(0)', filter: 'blur(0)' }];
+      const name = nav.querySelector('.tname');
+      if (name) name.animate(slide(d * 36, 7), { duration: 300, easing: 'cubic-bezier(.2,.8,.3,1)' });
+      Array.from(nav.parentElement.querySelectorAll('.mrow')).forEach((el, k) => {
+        el.animate(slide(d * 26, 5), { duration: 320, delay: Math.min(k, 6) * 18, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'backwards' });
+      });
+      const scroller = nav.closest('.mlist, .dlg-body, .mbody') || nav.parentElement;
+      if (scroller) scroller.scrollTop = 0;
+    });
   }
 
   // Shows a settings page; the page name and the page slide in from the side it came from, with a motion blur.
@@ -1730,6 +1904,16 @@ L("""      hasToast: !!s.toast,""",
           + 'satisfied or suffer its deadly curse yourself.',
       lastLabel: !this.ingame ? 'Credits' : s.quitArmed ? 'Press again to quit' : 'Quit Game',
       lastCls: this.ingame && s.quitArmed ? 'warn' : '',
+      stateRowStyle: this.ingame ? 'display:flex;gap:8px' : 'display:none',
+      stateSlotsStyle: this.ingame ? 'display:flex;gap:10px;align-items:center;min-width:0' : 'display:none',
+      stateSlotChips: [1, 2, 3].map((n) => {
+        const cur = (s.stateSlot || 1) === n, when = (this.stateSlots || [])[n - 1] || '';
+        return { name: String(n), on: cur, cls: cur ? 'on' : '', tip: when ? 'Saved ' + when : 'Empty',
+          pick: () => { this.setState({ stateSlot: n }); this.hap('press'); if (this.host) this.host.postMessage('stateslot\\nslot=' + n); } };
+      }),
+      stateSlotText: (() => { const n = s.stateSlot || 1, when = (this.stateSlots || [])[n - 1] || ''; return when || 'Empty'; })(),
+      saveStateBtn: () => { if (this.host) this.host.postMessage('savestate\\nslot=' + (this.state.stateSlot || 1)); },
+      loadStateBtn: () => { if (this.host) this.host.postMessage('loadstate\\nslot=' + (this.state.stateSlot || 1)); },
       lastBtn: () => {
         if (!this.ingame) { this.setState({ modal: 'credits' }); return; }
         if (this.state.quitArmed) { if (this.host) this.host.postMessage('quit'); return; }
@@ -2029,10 +2213,12 @@ L("""  toastMsg(msg) {""",
 # Camera (the pad's right stick) on the keyboard: four more rows in Configure Controller, defaults I K J L.
 L("""['start', 'Start', 'Menu'], ['select', 'Select', 'View']];""",
   """['start', 'Start', 'Menu'], ['select', 'Select', 'View'],
+      ['move_up', 'Move Up', 'Left stick up'], ['move_down', 'Move Down', 'Left stick down'],
+      ['move_left', 'Move Left', 'Left stick left'], ['move_right', 'Move Right', 'Left stick right'],
       ['camera_up', 'Camera Up', 'Right stick up'], ['camera_down', 'Camera Down', 'Right stick down'],
       ['camera_left', 'Camera Left', 'Right stick left'], ['camera_right', 'Camera Right', 'Right stick right']];""")
 L("""start: 'ENTER', select: 'TAB' };""",
-  """start: 'ENTER', select: 'TAB', camera_up: 'I', camera_down: 'K', camera_left: 'J', camera_right: 'L' };""")
+  """start: 'ENTER', select: 'TAB', move_up: 'W', move_down: 'S', move_left: 'A', move_right: 'D', camera_up: 'I', camera_down: 'K', camera_left: 'J', camera_right: 'L' };""")
 
 # Public page: the game's back-of-box text is not used.
 if PUBLIC:
@@ -2064,6 +2250,15 @@ L("""      setTex: (e) => this.setState({ tex: Number(e.target.value) }),""",
       tabOpts: [['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']].map((t) => ({ name: t[1], on: s.tab === t[0], cls: s.tab === t[0] ? 'on' : '', pick: () => this.tabGo(t[0]) })),
       tabName: ({ display: 'Display', graphics: 'Graphics', effects: 'Effects', perf: 'Performance', jukebox: 'Sound & Jukebox', languages: 'Languages', controller: 'Controls', features: 'Feature Set' })[s.tab || 'display'] || 'Display',
       tabPrev: () => this.navTab(-1),
+      modTabOpts: window.MOD_TABS.map((t) => ({ name: t[1], on: (s.modTab || 'look') === t[0], cls: (s.modTab || 'look') === t[0] ? 'on' : '', pick: () => this.modTabGo(t[0]) })),
+      modTabName: (window.MOD_TABS.find((t) => t[0] === (s.modTab || 'look')) || window.MOD_TABS[0])[1],
+      modTabPrev: () => this.navModTab(-1),
+      modTabNext: () => this.navModTab(1),
+      modTabLook: (s.modTab || 'look') === 'look',
+      modTabPad: s.modTab === 'pad',
+      modTabGameplay: s.modTab === 'gameplay',
+      bossHpChips: [['100', 'Original'], ['75', '75%'], ['50', '50%'], ['33', '33%']].map((c) => ({ name: c[1], on: (s.bosshp || '50') === c[0], cls: (s.bosshp || '50') === c[0] ? 'on' : '', pick: () => { this.setState({ bosshp: c[0] }); this.hap('press'); } })),
+      bossHpName: (s.bosshp || '50') === '100' ? 'the original' : (s.bosshp || '50') + '% of the original',
       tabNext: () => this.navTab(1),
       tabHintL: s.padKind === 'ps' ? 'L1' : s.padKind === 'xbox' ? 'LB' : s.padKind === 'nintendo' ? 'L' : 'Q',
       tabHintR: s.padKind === 'ps' ? 'R1' : s.padKind === 'xbox' ? 'RB' : s.padKind === 'nintendo' ? 'R' : 'E',
@@ -2092,7 +2287,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, lvoice: s.lvoice || 'en', ltext: s.ltext || 'en', bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('lvoice', s.lvoice || 'en'); add('ltext', s.ltext || 'en'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('norecenter', s.norecenter ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('bosshp', s.bosshp || '50'); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('fov', s.fov || '100'); add('lvoice', s.lvoice || 'en'); add('ltext', s.ltext || 'en'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['jukebox', 'Jukebox'], ['languages', 'Languages'], ['controller', 'Controls'], ['features', 'Feature Set']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -2126,6 +2321,10 @@ L("""      tabController: s.tab === 'controller',""",
       musicName: s.musicName || 'Original theme',
       pickMusic: () => { if (this.host) this.host.postMessage('musicpick'); },
       defaultMusic: () => { if (this.host) this.host.postMessage('musicdefault'); },
+      fovNum: Math.max(70, Math.min(150, Number(s.fov || 100))),
+      fovName: Number(s.fov || 100) === 100 ? '100% (original)' : Number(s.fov || 100) + '%',
+      fovBg: fill((Math.max(70, Math.min(150, Number(s.fov || 100))) - 70) / 20),
+      setFov: (e) => this.setState({ fov: String(Math.round(Number(e.target.value) / 5) * 5) }),
       volNum: Math.max(0, Math.min(100, Number(s.vol || 100))),
       volName: Number(s.vol || 100) <= 0 ? 'Mute' : Number(s.vol || 100) + '%',
       volBg: fill(Math.max(0, Math.min(100, Number(s.vol || 100))) / 25),
@@ -2165,7 +2364,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, unlockall: !!s.unlockall, fairboss: !!s.fairboss, infhealth: !!s.infhealth, hdtex: s.hdtex !== false, dumptex: !!s.dumptex, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', vol: s.vol || '100', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, norecenter: !!s.norecenter, unlockall: !!s.unlockall, fairboss: !!s.fairboss, bosshp: s.bosshp || '50', infhealth: !!s.infhealth, hdtex: s.hdtex !== false, dumptex: !!s.dumptex, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', vol: s.vol || '100', fov: s.fov || '100', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
@@ -2249,31 +2448,33 @@ L("""pick: set({ res: r[0], resOpen: false })""",
 
 # Mod Menu: the game's own mods first (their own settings keys), then the rest.
 L("""    const modRows = MODS.map((m) => ({""",
-  """    const GAME_MODS = [
-      ['cam', 'Close-up camera (F3)', 'A closer, over-the-shoulder camera for more intimate combat.', false],
-      ['hud', 'Hide HUD (F5)', 'Health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.', false],
-      ['bars', 'IMAX mode (F7)', 'Full-screen TATE finishing moves: no black bars. Movies and story scenes keep theirs.', false],
-      ['unlockall', 'Unlock everything (Shift+F6)', 'Every difficulty, character and extra open from the start. Your save is not changed.', false],
-      ['infhealth', 'Infinite health (F8)', 'Hotsuma takes no damage from hits, and Akujiki no longer drains him.', false],
-      ['fairboss', 'Fair final boss (F9)', 'Hiruko without the hidden rules: quick seals, no parries, ground teleports only, steady lock-on, and self-destructing talismans count for TATE.', false],
-      ['hdtex', 'HD texture packs (Shift+F5)', 'Loads HD replacement textures (an HD HUD, for example) from the textures folder. Nothing changes without a pack.', true],
-      ['dumptex', 'Save textures (pack makers)', 'Saves every texture the game uses to textures/SLUS-20459/dumps to make an HD pack from. Slows the game: leave it off to play.', false],
-      ['nohunger', 'No sword hunger (Shift+F7)', 'Akujiki no longer drains your health when it has not killed for a while.', false],
-      ['noscarf', 'Remove scarf (Shift+F8)', 'Hotsuma without his scarf.', false],
-      ['scol', 'Scarf body collision (Shift+F9)', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true],
-      ['haptics', 'DualSense haptics', 'Footsteps, sword hits, shuriken, dash and ninja magic felt in a DualSense / DualSense Edge (USB or Bluetooth). Live in game.', true],
-      ['trig', 'L2 trigger resistance', 'L2 stiffens part way down and clicks through just before the ninja magic fires. Live in game.', true]
+  """    window.MOD_TABS = window.MOD_TABS || [['look', 'Look'], ['camera', 'Camera'], ['gameplay', 'Gameplay'], ['pad', 'Controller'], ['start', 'Start-up'], ['adv', 'Advanced']];
+    const GAME_MODS = [
+      ['cam', 'Close-up camera (F3)', 'A closer, over-the-shoulder camera for more intimate combat.', false, 'camera'],
+      ['norecenter', 'No camera recentering', 'The camera keeps your angle instead of swinging behind Hotsuma as he runs. The right stick and camera reset still work.', false, 'camera'],
+      ['hud', 'Hide HUD (F5)', 'Health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.', false, 'look'],
+      ['bars', 'IMAX mode (F7)', 'Full-screen TATE finishing moves: no black bars. Movies and story scenes keep theirs.', false, 'look'],
+      ['unlockall', 'Unlock everything (Shift+F6)', 'Every difficulty, character and extra open from the start. Your save is not changed.', false, 'gameplay'],
+      ['infhealth', 'Infinite health (F8)', 'Hotsuma takes no damage from hits, and Akujiki no longer drains him.', false, 'gameplay'],
+      ['fairboss', 'Fair final boss (F9)', 'Hiruko without the hidden rules: quick seals, no parries, ground teleports only, steady lock-on, and self-destructing talismans count for TATE.', false, 'gameplay'],
+      ['hdtex', 'HD texture packs (Shift+F5)', 'Loads HD replacement textures (an HD HUD, for example) from the textures folder. Nothing changes without a pack.', true, 'look'],
+      ['dumptex', 'Save textures (pack makers)', 'Saves every texture the game uses to textures/SLUS-20459/dumps to make an HD pack from. Slows the game: leave it off to play.', false, 'look'],
+      ['nohunger', 'No sword hunger (Shift+F7)', 'Akujiki no longer drains your health when it has not killed for a while.', false, 'gameplay'],
+      ['noscarf', 'Remove scarf (Shift+F8)', 'Hotsuma without his scarf.', false, 'look'],
+      ['scol', 'Scarf body collision (Shift+F9)', 'The scarf keeps its float and trail but no longer passes through Hotsuma.', true, 'look'],
+      ['haptics', 'DualSense haptics', 'Footsteps, sword hits, shuriken, dash and ninja magic felt in a DualSense / DualSense Edge (USB or Bluetooth). Live in game.', true, 'pad'],
+      ['trig', 'L2 trigger resistance', 'L2 stiffens part way down and clicks through just before the ninja magic fires. Live in game.', true, 'pad']
     ];
     const gameModRows = GAME_MODS.map((m) => {
       const on = m[3] ? s[m[0]] !== false : !!s[m[0]];
-      return { name: m[1], desc: m[2], on: on, toggle: () => this.setState({ [m[0]]: !on }) };
+      return { cat: m[4], name: m[1], desc: m[2], on: on, toggle: () => this.setState({ [m[0]]: !on }) };
     });
-    const modRows = gameModRows.concat(MODS.map((m) => ({""")
+    const modRows = gameModRows.concat(MODS.map((m) => ({ cat: (m[0] === 'studio' || m[0] === 'intro') ? 'start' : 'adv',""")
 
 L("""      toggle: () => this.setState({ mods: Object.assign({}, this.state.mods, { [m[0]]: !this.state.mods[m[0]] }) })
     }));""",
   """      toggle: () => this.setState({ mods: Object.assign({}, this.state.mods, { [m[0]]: !this.state.mods[m[0]] }) })
-    })));""")
+    }))).filter((r) => r.cat === (s.modTab || 'look'));""")
 
 # Updates: the host tells the page about a newer release; the button installs it.
 L("""    if (m === 'manualhide') { this.manualHide(); return; }""",

@@ -92,6 +92,13 @@ namespace ps2x::settings
                 static const char *const kFunctions[] = {"F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"};
                 for (int index = 0; index < 10; ++index)
                     names.push_back({KEY_F3 + index, kFunctions[index]});
+                // LOCAL PATCH (GitHub issue #20): mouse buttons can be bound too (codes 1000 + raylib's mouse button;
+                // ps2_pad.cpp reads them with IsMouseButtonDown).
+                names.push_back({1000 + MOUSE_BUTTON_LEFT, "MOUSE_LEFT"});
+                names.push_back({1000 + MOUSE_BUTTON_RIGHT, "MOUSE_RIGHT"});
+                names.push_back({1000 + MOUSE_BUTTON_MIDDLE, "MOUSE_MIDDLE"});
+                names.push_back({1000 + MOUSE_BUTTON_SIDE, "MOUSE_4"});
+                names.push_back({1000 + MOUSE_BUTTON_EXTRA, "MOUSE_5"});
                 return names;
             }();
             return s_names;
@@ -515,6 +522,11 @@ namespace ps2x::settings
                                   0, nullptr, true}; // LOCAL PATCH: live (ps2xWidescreenVsync)
                 aspect.choiceEnvironment = {"", "16:9", "21:9", "32:9", "auto", ""};
                 add(aspect);
+                // LOCAL PATCH (GitHub issue #23): field of view, live (ps2_hud_mod.cpp ps2xFovApply).
+                add({"video", "fov", "Field of view",
+                     "How much of the world the camera shows, in percent of the original view (100). Higher sees more "
+                     "around Hotsuma, lower is closer and more cinematic.",
+                     Kind::Number, "100", nullptr, {}, {}, 70, 150, nullptr, true});
             }
             {
                 Definition hud{"video", "hud", "HUD no widescreen",
@@ -587,6 +599,10 @@ namespace ps2x::settings
                  "he only teleports to spots on the ground, lock-on stays on him, and talismans that blow themselves "
                  "up still count towards your TATE. F9 switches it while playing.",
                  Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod): the final boss's health in the real fight, percent of the original (ps2_fair_boss.cpp).
+            add({"game", "final_boss_health", "Final boss health",
+                 "Hiruko's health once the real fight starts, as a share of the original: 100 is the original game.",
+                 Kind::Number, "50", nullptr, {}, {}, 10, 100, nullptr, true});
             // LOCAL PATCH (mod): every difficulty, character and extra open from the start (ps2_unlocks.cpp).
             add({"game", "unlock_all", "Unlock everything",
                  "Every difficulty, character and extra open from the start. Your save is not changed: switch it off and "
@@ -596,6 +612,12 @@ namespace ps2x::settings
             add({"game", "no_sword_hunger", "No sword hunger",
                  "Akujiki no longer drains your health when it has not killed for a while: play at your own pace. "
                  "Shift+F7 switches it while playing.",
+                 Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
+            // LOCAL PATCH (mod, GitHub #22): the stage camera keeps its angle (ps2_hud_mod.cpp ps2xCameraKeepYaw).
+            add({"game", "no_camera_recenter", "No camera recentering",
+                 "The camera keeps the angle you give it instead of swinging round behind Hotsuma as he runs, so "
+                 "enemies stay on screen. The right stick (or mouse) still turns it, and the camera-reset button still "
+                 "puts it behind him.",
                  Kind::Bool, "false", nullptr, {}, {}, 0, 0, nullptr, true});
             // LOCAL PATCH (mod): Hotsuma cannot be hurt (ps2_hud_mod.cpp, hook in CPlayer::Damage). F8 in game.
             add({"game", "infinite_health", "Infinite health",
@@ -689,9 +711,14 @@ namespace ps2x::settings
             for (const PadButton &button : padButtons())
             {
                 static const std::map<std::string, std::string> kDefaults = {
-                    {"up", "UP,W"},       {"down", "DOWN,S"},     {"left", "LEFT,A"},       {"right", "RIGHT,D"},
-                    {"cross", "X,SPACE"}, {"circle", "C,ESCAPE"}, {"square", "Z,KP_0"},     {"triangle", "V,KP_1"},
-                    {"l1", "Q"},          {"r1", "E"},            {"l2", "LEFT_SHIFT"},     {"r2", "RIGHT_SHIFT"},
+                    // GitHub issue #20: WASD moves (left stick only); the D-pad (menus, ninpo scrolls) is the arrows.
+                    // 0.7 PC layout: Q shuriken (Triangle), E next ninjutsu (D-pad right), R lock-on (R1), F camera
+                    // reset (L1), Shift ninjutsu (L2); mouse: left sword, right lock-on, middle ninjutsu, wheel next
+                    // target (ps2_pad.cpp). Older files that still hold the 0.6 defaults are moved over in load().
+                    {"up", "UP"},         {"down", "DOWN"},       {"left", "LEFT"},         {"right", "RIGHT,E"},
+                    {"move_up", "W"},     {"move_down", "S"},     {"move_left", "A"},       {"move_right", "D"},
+                    {"cross", "X,SPACE"}, {"circle", "C,ESCAPE"}, {"square", "Z,KP_0"},     {"triangle", "Q,V,KP_1"},
+                    {"l1", "F"},          {"r1", "R"},            {"l2", "LEFT_SHIFT"},     {"r2", "RIGHT_SHIFT"},
                     {"start", "ENTER"},   {"select", "TAB"},      {"l3", ""},               {"r3", ""},
                     {"camera_up", "I"},   {"camera_down", "K"},   {"camera_left", "J"},     {"camera_right", "L"},
                 };
@@ -761,6 +788,16 @@ namespace ps2x::settings
             const std::string key = keyOf(definition.section, definition.key);
             const auto inFile = fileValues.find(key);
             std::string value = inFile != fileValues.end() ? inFile->second : definition.defaultValue;
+            // LOCAL PATCH (0.7 PC layout): a key still on its 0.6 default moves to the new default (one the player
+            // changed is kept).
+            if (inFile != fileValues.end() && std::strcmp(definition.section, "controls") == 0)
+            {
+                static const std::pair<const char *, const char *> kOld[] = {
+                    {"l1", "Q"}, {"r1", "E"}, {"triangle", "V,KP_1"}, {"right", "RIGHT"}, {"right", "RIGHT,D"}};
+                for (const auto &[oldKey, oldValue] : kOld)
+                    if (std::strcmp(definition.key, oldKey) == 0 && value == oldValue)
+                        value = definition.defaultValue;
+            }
             if (definition.environment)
             {
                 if (const char *env = std::getenv(definition.environment))
@@ -783,6 +820,7 @@ namespace ps2x::settings
         s.atLoad = s.values;
         loadCheats(s);
         refreshCheats(s);
+        g_version.fetch_add(1u, std::memory_order_relaxed); // LOCAL PATCH (get() cache)
         std::cerr << "[settings] " << (s.disabled ? std::string("off") : s.file.string()) << ", " << s.cheats.size()
                   << " cheat groups" << std::endl;
     }
@@ -828,7 +866,40 @@ namespace ps2x::settings
         return s.disabled ? std::filesystem::path() : s.file;
     }
 
+    std::string getUncached(const char *section, const char *key);
+
     std::string get(const char *section, const char *key)
+    {
+        // LOCAL PATCH (performance): the game asks for a few settings every frame (pad, mods, renderer), and each ask
+        // built a key string, took the lock and searched the map. Each thread keeps the answers it has had, by the call's
+        // section / key pointers (string literals), until any setting changes (version()).
+        // The text is compared too: a caller may build the key in a temporary string (the pad bindings build
+        // "pad_" + name), so one address can hold a different key each call.
+        struct Cached
+        {
+            std::string section;
+            std::string key;
+            uint64_t version;
+            std::string value;
+        };
+        thread_local std::vector<Cached> t_cache;
+        const uint64_t version = g_version.load(std::memory_order_acquire);
+        for (Cached &c : t_cache)
+            if (c.key == key && c.section == section)
+            {
+                if (c.version == version)
+                    return c.value;
+                c.value = getUncached(section, key);
+                c.version = version;
+                return c.value;
+            }
+        std::string value = getUncached(section, key);
+        if (t_cache.size() < 256u)
+            t_cache.push_back({section, key, version, value});
+        return value;
+    }
+
+    std::string getUncached(const char *section, const char *key)
     {
         State &s = state();
         std::lock_guard<std::mutex> lock(s.mutex);
@@ -931,6 +1002,7 @@ namespace ps2x::settings
         }
         s.values[keyOf("hacks", "enabled")] = list;
         refreshCheats(s);
+        g_version.fetch_add(1u, std::memory_order_relaxed); // LOCAL PATCH (get() cache)
     }
 
     std::shared_ptr<const std::vector<FrameWrite>> activeFrameWrites()
@@ -959,6 +1031,10 @@ namespace ps2x::settings
             // The camera (the pad's right stick) on the keyboard: no button bit, ps2_pad.cpp reads these four itself.
             {"camera_up", "Camera up (right stick)", 0u},       {"camera_down", "Camera down (right stick)", 0u},
             {"camera_left", "Camera left (right stick)", 0u},   {"camera_right", "Camera right (right stick)", 0u},
+            // LOCAL PATCH (GitHub issue #20): moving Hotsuma (the left stick) on its own keys, so they no longer press the
+            // D-pad too (which picks the ninpo scroll). ps2_pad.cpp reads these four itself.
+            {"move_up", "Move up (left stick)", 0u},            {"move_down", "Move down (left stick)", 0u},
+            {"move_left", "Move left (left stick)", 0u},        {"move_right", "Move right (left stick)", 0u},
         };
         return s_buttons;
     }

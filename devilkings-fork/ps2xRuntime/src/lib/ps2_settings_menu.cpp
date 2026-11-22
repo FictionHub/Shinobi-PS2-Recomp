@@ -74,8 +74,10 @@ void PS2SettingsMenu::close()
 void PS2SettingsMenu::draw(PS2Runtime &runtime)
 {
     (void)runtime;
-    // LOCAL PATCH: Shift+F1 (F1 alone opens the styled in-game menu, ps2_ingame_menu.cpp). This one keeps the advanced tabs.
-    if (IsKeyPressed(KEY_F1) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+    // LOCAL PATCH: Ctrl+Shift+F1, the developer settings (F1 alone opens the styled in-game menu, ps2_ingame_menu.cpp;
+    // Shift+F1 is save state). This one keeps the advanced tabs.
+    if (IsKeyPressed(KEY_F1) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) &&
+        (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)))
     {
         if (m_visible)
             close();

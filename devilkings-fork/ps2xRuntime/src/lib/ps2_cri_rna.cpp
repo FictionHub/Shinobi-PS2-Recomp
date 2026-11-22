@@ -318,3 +318,53 @@ void ps2xCriRnaMix(int16_t *out, size_t frames)
         s.lastConsumed = std::chrono::steady_clock::now();
     }
 }
+
+// LOCAL PATCH (save states, GitHub #16): the queued PCM of every RNA object (the decoder's own position is in guest
+// memory, so the queue must match it).
+#include "runtime/ps2_savestate.h"
+void ps2xCriRnaSaveState(ps2x::savestate::Writer &out)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    out.section("cri-rna");
+    out.u32(static_cast<uint32_t>(g_streams.size()));
+    for (const auto &[rna, s] : g_streams)
+    {
+        out.u32(rna);
+        out.podVector(s.ring);
+        out.u32(s.read);
+        out.u32(s.count);
+        out.pod(s.phase);
+        out.u32(s.rate);
+        out.pod(s.gain);
+        out.pod(s.playing);
+    }
+}
+
+bool ps2xCriRnaLoadState(ps2x::savestate::Reader &in)
+{
+    if (!in.section("cri-rna"))
+        return false;
+    std::map<uint32_t, Stream> streams;
+    const uint32_t n = in.u32();
+    for (uint32_t i = 0; i < n && !in.failed(); ++i)
+    {
+        const uint32_t rna = in.u32();
+        Stream s;
+        in.podVector(s.ring);
+        s.read = in.u32();
+        s.count = in.u32();
+        in.pod(s.phase);
+        s.rate = in.u32();
+        in.pod(s.gain);
+        in.pod(s.playing);
+        if (s.ring.size() != kCapacity * 2u)
+            s.ring.assign(kCapacity * 2u, 0);
+        s.lastConsumed = std::chrono::steady_clock::now();
+        streams[rna] = std::move(s);
+    }
+    if (in.failed())
+        return false;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_streams = std::move(streams);
+    return true;
+}

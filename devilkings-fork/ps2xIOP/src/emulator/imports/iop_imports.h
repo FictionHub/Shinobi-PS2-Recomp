@@ -6,6 +6,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ps2x::iop::detail
@@ -44,7 +46,14 @@ namespace ps2x::iop::detail
 
         [[nodiscard]] const ExportLibrary *findLibrary(std::string_view name, std::optional<uint16_t> version) const;
 
+        void clearCaches() const;
+        [[nodiscard]] std::optional<IopImportCall> decodeUncached(uint32_t pc, uint32_t delay) const;
+
         IopMemory &m_memory;
         std::map<uint32_t, ExportLibrary> m_libraries;
+        // LOCAL PATCH (performance): every import call decoded its stub (a backward search for the table) and looked the
+        // library up by name. Both answers are kept until a library is added or removed.
+        mutable std::unordered_map<uint32_t, std::pair<uint32_t, IopImportCall>> m_decodeCache; // stub pc -> (delay word, call)
+        mutable std::map<std::pair<std::string, uint32_t>, uint32_t> m_resolveCache;            // (name, ordinal|version) -> target
     };
 }

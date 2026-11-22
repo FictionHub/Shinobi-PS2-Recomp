@@ -6,11 +6,13 @@
 
 namespace ps2x::iop::detail
 {
+    struct IopSaveStateAccess;
     struct IopCpuState;
     class IopGuestExecutor;
 
     class IopTimrman
     {
+        friend struct IopSaveStateAccess; // LOCAL PATCH (save states): iop_emulator.cpp
     public:
         void reset() noexcept;
 

@@ -10,6 +10,8 @@ namespace ps2x::ingame
         None,
         Quit,    // Quit Game
         Restart, // Restart Game: start the game again with the saved settings, then quit this one
+        SaveState, // LOCAL PATCH (save states): Save State button (closes the menu, then saves)
+        LoadState, // LOCAL PATCH (save states): Load State button
     };
 
     // `window` is the game window's HWND (raylib GetWindowHandle()).

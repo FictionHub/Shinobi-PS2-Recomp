@@ -14,8 +14,10 @@
 
 namespace ps2x::iop::detail
 {
+    struct IopSaveStateAccess;
     class IopMemory
     {
+        friend struct IopSaveStateAccess; // LOCAL PATCH (save states): iop_emulator.cpp
     public:
         static constexpr uint32_t RamSize = 2u * 1024u * 1024u;
         static constexpr uint32_t ScratchBase = 0x1F800000u;

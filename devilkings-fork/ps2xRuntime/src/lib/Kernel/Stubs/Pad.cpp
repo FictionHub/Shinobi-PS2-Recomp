@@ -16,6 +16,7 @@ extern std::atomic<bool> g_ps2StageDetected; // ps2_vu1_core.cpp: a stage is run
 // The window loop (ps2_runtime.cpp) sets these: the mouse is captured and turns the camera. The stick values are -1..1.
 std::atomic<bool> g_ps2MouseLookActive{false};
 std::atomic<float> g_ps2MouseStickX{0.0f};
+std::atomic<int> g_ps2MouseWheelNotches{0}; // LOCAL PATCH (mouse in menus): wheel notches not yet used (ps2_pad.cpp)
 std::atomic<float> g_ps2MouseStickY{0.0f};
 
 // LOCAL PATCH (haptics trace): src/lib/ps2_haptics_trace.cpp
@@ -247,7 +248,9 @@ namespace ps2_stubs
             {
                 if (tick >= step.from && tick <= step.to)
                 {
-                    setButton(state, stageRunning ? static_cast<uint16_t>(step.mask & ~kPadBtnStart) : step.mask, true);
+                    // PS2X_PAD_SCRIPT_START_IN_STAGE=1 (tests of the pause menu, e.g. Retry): START is pressed in a stage too.
+                    static const bool s_startInStage = []() { const char *v = std::getenv("PS2X_PAD_SCRIPT_START_IN_STAGE"); return v && v[0] == '1'; }();
+                    setButton(state, stageRunning && !s_startInStage ? static_cast<uint16_t>(step.mask & ~kPadBtnStart) : step.mask, true);
                     if (step.stickX != 0)
                         state.lx = step.stickX < 0 ? 0u : 255u;
                     if (step.stickY != 0)

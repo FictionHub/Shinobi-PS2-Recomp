@@ -157,6 +157,7 @@ namespace ps2x::iop::detail
 
     class IopCdvd::Impl
     {
+        friend class IopCdvd; // LOCAL PATCH (save states)
     public:
         struct Callback
         {
@@ -755,5 +756,43 @@ namespace ps2x::iop::detail
     std::optional<IopCdvd::CompletionCallback> IopCdvd::takeCompletionCallback() noexcept
     {
         return m_impl->takeCompletionCallback();
+    }
+
+    // LOCAL PATCH (save states, GitHub #16)
+    IopCdvd::SavedState IopCdvd::saveState() const
+    {
+        const Impl &d = *m_impl;
+        SavedState s;
+        s.callbackAddress = d.callback.address;
+        s.callbackGp = d.callback.gp;
+        s.hasCompletion = d.completionCallback.has_value();
+        if (s.hasCompletion)
+            s.completion = *d.completionCallback;
+        s.initialized = d.initialized;
+        s.mediaMode = d.mediaMode;
+        s.currentLsn = d.currentLsn;
+        s.lastError = d.lastError;
+        s.streamFlag = d.streamFlag;
+        s.lastReadTimeout = d.lastReadTimeout;
+        s.interruptEventFlagId = d.interruptEventFlagId;
+        return s;
+    }
+
+    void IopCdvd::loadState(const SavedState &s)
+    {
+        Impl &d = *m_impl;
+        d.callback.address = s.callbackAddress;
+        d.callback.gp = s.callbackGp;
+        if (s.hasCompletion)
+            d.completionCallback = s.completion;
+        else
+            d.completionCallback.reset();
+        d.initialized = s.initialized;
+        d.mediaMode = s.mediaMode;
+        d.currentLsn = s.currentLsn;
+        d.lastError = s.lastError;
+        d.streamFlag = s.streamFlag;
+        d.lastReadTimeout = s.lastReadTimeout;
+        d.interruptEventFlagId = s.interruptEventFlagId;
     }
 }

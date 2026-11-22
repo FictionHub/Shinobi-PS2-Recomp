@@ -3,7 +3,9 @@
 #    not see a dim grey mask (soft, dark edges) and the result never goes over 128 (bright fringes in game);
 #  - colour is upscaled separately, with the colours of the visible pixels spread into the see-through ones first, so
 #    no dark halos appear around shapes.
-# usage: python ps2_upscale.py [model]   (model: realesrgan-x4plus (default) or realesrgan-x4plus-anime)
+# usage: python ps2_upscale.py [model] [--redo]   (model: realesrgan-x4plus (default) or realesrgan-x4plus-anime)
+#        textures that already have a replacement are left alone (an earlier pack is never overwritten); --redo
+#        upscales them again.
 #        reads dumps\*.png, writes replacements\*.png (same names, 4x)
 import os
 import shutil
@@ -15,7 +17,9 @@ import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODEL = sys.argv[1] if len(sys.argv) > 1 else "realesrgan-x4plus"
+REDO = "--redo" in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != "--redo"]
+MODEL = ARGS[0] if ARGS else "realesrgan-x4plus"
 EXE = os.path.join(HERE, "_esrgan", "realesrgan-ncnn-vulkan.exe")
 MIN_SIDE = 32  # Real-ESRGAN fails on very small pictures (and can then garble the rest of a batch): padded up to this
 
@@ -105,6 +109,14 @@ try:
     for d in ("rgb", "a", "rgb_up", "a_up"):
         os.makedirs(os.path.join(work, d))
     names = sorted(f for f in os.listdir(os.path.join(HERE, "dumps")) if f.lower().endswith(".png"))
+    done = set(os.listdir(os.path.join(HERE, "replacements"))) if os.path.isdir(os.path.join(HERE, "replacements")) else set()
+    if not REDO:
+        kept = [f for f in names if f in done]
+        names = [f for f in names if f not in done]
+        print("%d new textures to upscale; %d already have a replacement and are left as they are (--redo to redo them)" % (len(names), len(kept)))
+    if not names:
+        print("Nothing new in dumps.")
+        sys.exit(0)
     for f in names:
         im = np.array(Image.open(os.path.join(HERE, "dumps", f)).convert("RGBA"))
         a = im[..., 3].astype(np.int32)

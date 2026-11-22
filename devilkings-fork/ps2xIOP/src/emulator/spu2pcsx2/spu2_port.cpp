@@ -523,3 +523,110 @@ namespace ps2x::iop::spu2pcsx2
 		return result;
 	}
 } // namespace ps2x::iop::spu2pcsx2
+
+// ---- LOCAL PATCH (save states, GitHub #16) -------------------------------------------------------------------------
+// Adapted from PCSX2 v2.8.0 pcsx2/SPU2/spu2freeze.cpp (GPL-3.0+): the same data, DMA pointers stored as offsets into IOP
+// memory, the ADPCM cache wiped and each voice's sample pointer recomputed on load.
+namespace ps2x::iop::spu2pcsx2
+{
+	namespace
+	{
+		struct PortState
+		{
+			psxRegisters regs;
+			psxCounter counters[8];
+			s32 nextDelta;
+			u32 nextStart;
+			u64 clocks;
+			float dcIn[2], dcOut[2];
+			u16 outPos, inputPos;
+			u32 cycles;
+			int playMode;
+		};
+
+		template <typename T>
+		void put(std::vector<uint8_t> &out, const T &v)
+		{
+			const auto *p = reinterpret_cast<const uint8_t *>(&v);
+			out.insert(out.end(), p, p + sizeof(T));
+		}
+		void putRaw(std::vector<uint8_t> &out, const void *data, size_t size)
+		{
+			const auto *p = static_cast<const uint8_t *>(data);
+			out.insert(out.end(), p, p + size);
+		}
+	}
+
+	void saveState(std::vector<uint8_t> &out)
+	{
+		const uint32_t magic = 0x32555053u; // "SPU2"
+		put(out, magic);
+		put(out, static_cast<uint32_t>(sizeof(V_Core)));
+		putRaw(out, spu2regs, sizeof(spu2regs));
+		putRaw(out, _spu2mem, sizeof(_spu2mem));
+		V_Core cores[2];
+		std::memcpy(cores, Cores, sizeof(cores));
+		u8 *const base = iopPhysMem(0);
+		for (V_Core &core : cores)
+		{
+			core.DMAPtr = core.DMAPtr ? reinterpret_cast<u16 *>(reinterpret_cast<u8 *>(core.DMAPtr) - base) : reinterpret_cast<u16 *>(-1);
+			core.DMARPtr = core.DMARPtr ? reinterpret_cast<u16 *>(reinterpret_cast<u8 *>(core.DMARPtr) - base) : reinterpret_cast<u16 *>(-1);
+		}
+		putRaw(out, cores, sizeof(cores));
+		putRaw(out, &Spdif, sizeof(Spdif));
+		PortState s{};
+		s.regs = psxRegs;
+		std::memcpy(s.counters, psxCounters, sizeof(s.counters));
+		s.nextDelta = psxNextDeltaCounter;
+		s.nextStart = psxNextStartCounter;
+		s.clocks = lClocks;
+		std::memcpy(s.dcIn, DCFilterIn, sizeof(s.dcIn));
+		std::memcpy(s.dcOut, DCFilterOut, sizeof(s.dcOut));
+		s.outPos = OutPos;
+		s.inputPos = InputPos;
+		s.cycles = Cycles;
+		s.playMode = PlayMode;
+		put(out, s);
+	}
+
+	bool loadState(const uint8_t *data, size_t size)
+	{
+		const size_t need = 8u + sizeof(spu2regs) + sizeof(_spu2mem) + sizeof(V_Core) * 2u + sizeof(Spdif) + sizeof(PortState);
+		uint32_t magic = 0, coreSize = 0;
+		if (!data || size != need)
+			return false;
+		std::memcpy(&magic, data, 4);
+		std::memcpy(&coreSize, data + 4, 4);
+		if (magic != 0x32555053u || coreSize != sizeof(V_Core))
+			return false;
+		const uint8_t *p = data + 8;
+		std::memcpy(spu2regs, p, sizeof(spu2regs)); p += sizeof(spu2regs);
+		std::memcpy(_spu2mem, p, sizeof(_spu2mem)); p += sizeof(_spu2mem);
+		std::memcpy(Cores, p, sizeof(V_Core) * 2u); p += sizeof(V_Core) * 2u;
+		std::memcpy(&Spdif, p, sizeof(Spdif)); p += sizeof(Spdif);
+		PortState s{};
+		std::memcpy(&s, p, sizeof(s));
+		u8 *const base = iopPhysMem(0);
+		for (V_Core &core : Cores)
+		{
+			core.DMAPtr = core.DMAPtr == reinterpret_cast<u16 *>(-1) ? nullptr : reinterpret_cast<u16 *>(base + reinterpret_cast<size_t>(core.DMAPtr));
+			core.DMARPtr = core.DMARPtr == reinterpret_cast<u16 *>(-1) ? nullptr : reinterpret_cast<u16 *>(base + reinterpret_cast<size_t>(core.DMARPtr));
+		}
+		psxRegs = s.regs;
+		std::memcpy(psxCounters, s.counters, sizeof(s.counters));
+		psxNextDeltaCounter = s.nextDelta;
+		psxNextStartCounter = s.nextStart;
+		lClocks = s.clocks;
+		std::memcpy(DCFilterIn, s.dcIn, sizeof(s.dcIn));
+		std::memcpy(DCFilterOut, s.dcOut, sizeof(s.dcOut));
+		OutPos = s.outPos;
+		InputPos = s.inputPos;
+		Cycles = s.cycles;
+		PlayMode = s.playMode;
+		std::memset(pcm_cache_data, 0, pcm_BlockCount * sizeof(PcmCacheEntry));
+		for (int c = 0; c < 2; c++)
+			for (int v = 0; v < 24; v++)
+				Cores[c].Voices[v].SBuffer = pcm_cache_data[Cores[c].Voices[v].NextA / pcm_WordsPerBlock].Sampledata;
+		return true;
+	}
+} // namespace ps2x::iop::spu2pcsx2

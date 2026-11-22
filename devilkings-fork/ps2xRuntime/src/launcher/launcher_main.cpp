@@ -738,10 +738,10 @@ int main()
                 yy += 10;
                 text(g_bold, "Keyboard keys (settings.ini [controls])", r.x + 24, yy, 19, kInk);
                 yy += 28;
-                static const char *kButtons[][2] = {{"up", "UP,W"},       {"down", "DOWN,S"},     {"left", "LEFT,A"},
-                                                    {"right", "RIGHT,D"}, {"cross", "X,SPACE"},   {"circle", "C,ESCAPE"},
-                                                    {"square", "Z,KP_0"}, {"triangle", "V,KP_1"}, {"l1", "Q"},
-                                                    {"r1", "E"},          {"l2", "LEFT_SHIFT"},   {"r2", "RIGHT_SHIFT"},
+                static const char *kButtons[][2] = {{"up", "UP"},         {"down", "DOWN"},         {"left", "LEFT"},
+                                                    {"right", "RIGHT,E"}, {"cross", "X,SPACE"},     {"circle", "C,ESCAPE"},
+                                                    {"square", "Z,KP_0"}, {"triangle", "Q,V,KP_1"}, {"l1", "F"},
+                                                    {"r1", "R"},          {"l2", "LEFT_SHIFT"},     {"r2", "RIGHT_SHIFT"},
                                                     {"start", "ENTER"},   {"select", "TAB"}};
                 for (int i = 0; i < 14; ++i)
                 {

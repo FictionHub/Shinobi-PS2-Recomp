@@ -2,7 +2,9 @@
 // This header is the whole interface; it does not expose any PCSX2 type. See README.md in this folder.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace ps2x::iop::spu2pcsx2
 {
@@ -67,4 +69,9 @@ namespace ps2x::iop::spu2pcsx2
     };
     // Counters since the last call, voice counts as of now.
     [[nodiscard]] Stats takeStats(uint64_t cycle);
+
+    // LOCAL PATCH (save states, GitHub #16): the core's whole state, as PCSX2's spu2freeze.cpp keeps it (registers,
+    // 2 MiB sound memory, both cores, SPDIF, output position, clocks) plus this port's IOP counters.
+    void saveState(std::vector<uint8_t> &out);
+    [[nodiscard]] bool loadState(const uint8_t *data, size_t size);
 }

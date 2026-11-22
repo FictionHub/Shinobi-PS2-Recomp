@@ -13,6 +13,7 @@ namespace ps2x::iop
 
 namespace ps2x::iop::detail
 {
+    struct IopSaveStateAccess;
     struct IopCpuState;
     class IopKernel;
     class IopMemory;
@@ -42,6 +43,7 @@ namespace ps2x::iop::detail
 
     class IopRpcBridge
     {
+        friend struct IopSaveStateAccess; // LOCAL PATCH (save states): iop_emulator.cpp
     public:
         IopRpcBridge(IopHost &host, IopMemory &memory, IopKernel &kernel) noexcept;
 

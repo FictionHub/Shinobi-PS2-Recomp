@@ -2,7 +2,9 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
-**v0.6.0 is out:** Languages (Japanese, French, German, Italian, Spanish), a Jukebox for all 30 music tracks, IMAX story movies, true 1:1 mouse aiming, a rebuilt launcher and half the download (67 MB to 35 MB). **[Download v0.6.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack 1](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 235 textures, the HUD, menus and Stage 1, growing every update) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.6.0)
+**v0.7.0 is out:** Save states with 3 slots, a Field of View slider, no camera recentering, a proper PC mouse and keyboard layout, a final boss health slider, restart with Ctrl+R, an on-screen shortcuts panel (H), the Retry sound bug fixed, 13 fixes in all and lighter on the CPU. **[Download v0.7.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack v2](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 372 textures, now with Stage 2) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.7.0)
+
+**v0.6.0:** Languages (Japanese, French, German, Italian, Spanish), a Jukebox for all 30 music tracks, IMAX story movies, true 1:1 mouse aiming, a rebuilt launcher and half the download (67 MB to 35 MB). **[Download v0.6.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack 1](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 235 textures, the HUD, menus and Stage 1, growing every update) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.6.0)
 
 <p align="center"><img src="docs/screenshots/v0.6/banner.jpg" width="100%"><br><sub>Shinobi PS2 Recomp v0.6.</sub></p>
 
@@ -343,6 +345,11 @@ I didn't want "rumble". I wanted it to feel like a modern PS5 game, so I built i
 |---|---|
 | **F1** (or Select+Start) | Menu: settings, mods and controller, all live (pauses the game) |
 | **F2** | Performance overlay |
+| **Ctrl+F1** | Save state (save the game exactly where you are) |
+| **Ctrl+F2** | Load state (back to where you saved) |
+| **Ctrl+1 / 2 / 3** | Pick the save state slot |
+| **Ctrl+R** twice | Restart the game |
+| **H** | Shortcuts panel: every hotkey and mod, with its state |
 | **F3** | Close-up camera |
 | **F4** | Frame generation |
 | **F5** | Hide HUD |
@@ -405,18 +412,25 @@ The launcher remembers where your game file is and shows it under the Game File 
 
 Everything can be changed in **Configure Controller** (and the in-game menu, F1).
 
-| | Keyboard default |
-|---|---|
-| D-pad | Arrows or W A S D |
-| Cross / Circle | X or Space / C or Escape |
-| Square / Triangle | Z or Numpad 0 / V or Numpad 1 |
-| L1 / R1, L2 / R2 | Q / E, Left Shift / Right Shift |
-| Start / Select | Enter / Tab |
-| Camera (right stick) | I K J L |
+| Action | Keyboard default | Mouse |
+|---|---|---|
+| Move | W A S D | |
+| Jump (Circle) | C (or Escape) | |
+| Dash (Cross) | Space (or X) | |
+| Sword (Square) | Z | Left click |
+| Shuriken (Triangle) | Q (or V) | |
+| Ninjutsu (L2) | Left Shift | Middle click |
+| Next ninjutsu (D-pad right) | E | |
+| Lock on (R1) | R | Right click |
+| Next target (R2) | Right Shift | Wheel |
+| Camera reset (L1) | F | |
+| D-pad (menus, ninjutsu) | Arrows | |
+| Start / Select | Enter / Tab | |
+| Camera (right stick) | I K J L | Move the mouse |
 
-- **Mouse:** moves the camera; left click = Square, right click = Circle; **F10** switches it on and off.
+- **Mouse:** moves the camera 1:1; **F10** switches it on and off. In the game's menus: left click selects, right click goes back, the wheel moves up and down. Every key and mouse button (1-5) can be rebound; if you never changed your keys, you get this layout automatically.
 - **Controllers:** DualSense, DualSense Edge, DualShock 4 and Xbox (360, One, Series) use the standard layout. The DualSense Edge is the one tested; is a controller not working for you? Let me know.
-- **In game:** F1 or Select+Start = menu (pauses), F2 = performance overlay, F3 = close-up camera, F4 = frame generation, F5-F9 and Shift+F6-F9 = mods (see the table above), Alt+Enter or F11 = window / full screen, Ctrl+F8 = mark a problem in the log.
+- **In game:** F1 or Select+Start = menu (pauses), F2 = performance overlay, Ctrl+1/2/3 = state slot, Ctrl+F1 / Ctrl+F2 = save / load state, Ctrl+R twice = restart, H = shortcuts, F3 = close-up camera, F4 = frame generation, F5-F9 and Shift+F6-F9 = mods (see the table above), Alt+Enter or F11 = window / full screen, Ctrl+F8 = mark a problem in the log.
 
 ## Saves
 

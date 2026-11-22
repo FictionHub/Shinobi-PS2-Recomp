@@ -1,3 +1,4 @@
+#include <chrono>
 // LOCAL PATCH (mod): hide the HUD. The game's HUD pieces (DrawPlayerInfo, DrawHPInfo, DrawTateInfo, DrawKunaiInfo,
 // DrawSLASHInfo, DrawMakimono, DrawOboroCoin, the boss and enemy gauges) each have a Draw function; the runner's copies
 // of those return straight away while [game] hide_hud is on (F5 in game, the launcher's Display tab). Only drawing is
@@ -7,6 +8,9 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 bool ps2xHudHidden()
 {
@@ -71,8 +75,59 @@ bool ps2xInfiniteHealth()
 // frame while the sword is "awake" (CheckSwordWake), then your health (+0x32C) once the gauge is empty. With [game]
 // no_sword_hunger (Mod Menu) that drain step is skipped (the check reads as asleep there only); kills, the gauge and
 // everything else work as normal.
+// LOCAL PATCH (keyboard in menus): a heartbeat while Hotsuma is really being played. CPlayer::MainControlMeters (this
+// hook) and the stage camera (ps2xMouseAimX / Y in ps2_runtime.cpp) run every frame of play and stop in menus, the pause
+// menu, cutscenes and the title; ps2_pad.cpp makes Enter confirm (Cross) whenever they have stopped.
+std::atomic<double> g_ps2PlayHeartbeat{-100.0};
+double ps2xNowSeconds()
+{
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+void ps2xPlayHeartbeat()
+{
+    g_ps2PlayHeartbeat.store(ps2xNowSeconds(), std::memory_order_relaxed);
+}
+bool ps2xInGameplay()
+{
+    return ps2xNowSeconds() - g_ps2PlayHeartbeat.load(std::memory_order_relaxed) < 0.25;
+}
+
+// LOCAL PATCH (mod, GitHub #22): no camera recentering. CCameraManage::_FollowTarget (0x2e59c0) takes the camera's
+// turn (yaw) each frame from where the camera now stands relative to Hotsuma (VectorToRotation at 0x2e5c14, into
+// sp+0x124). The camera's position trails him, so running sideways swings it round behind him. With [game]
+// no_camera_recenter that yaw is replaced by the camera's own yaw from the last frame (CameraBase +0xB8): the angle stays
+// where it is, and the game's own distance keeping (_moveToRate) slides the camera along with him. The right stick
+// (_MovePad, eased by _FollowRotation), the camera-reset button, walls and collision all still turn it as before.
+// Only the normal follow camera with the player in control: not the lock-on / other-follow camera (+0x2C), a scripted
+// linear move (+0x38), or while the pad is off (cutscenes, CCameraManage +0x3C).
+void ps2xCameraKeepYaw(uint8_t *rdram, uint32_t manage, uint32_t cam, uint32_t sp)
+{
+    static uint64_t s_version = ~0ull;
+    static bool s_on = false;
+    const uint64_t version = ps2x::settings::version();
+    if (s_version != version)
+    {
+        s_on = ps2x::settings::getBool("game", "no_camera_recenter");
+        s_version = version;
+    }
+    auto rd = [rdram](uint32_t a) { uint32_t v; std::memcpy(&v, rdram + (a & 0x01FFFFFFu), 4u); return v; };
+    // Test hook: PS2X_CAM_TRACE=1 logs the camera's yaw (and the one the game wanted) twice a second.
+    static const bool s_trace = std::getenv("PS2X_CAM_TRACE") != nullptr;
+    static uint32_t s_calls = 0;
+    if (s_trace && (++s_calls % 30u) == 0u)
+        std::fprintf(stderr, "[camtrace] yaw=%u wanted=%u pad=%u other=%u linear=%u on=%d\n", rd(cam + 0xB8u) & 0xFFFFu,
+                     rd(sp + 0x124u) & 0xFFFFu, rd(manage + 0x3Cu), rd(cam + 0x2Cu), rd(cam + 0x38u), s_on ? 1 : 0);
+    if (!s_on)
+        return;
+    if (rd(manage + 0x3Cu) == 0u || rd(cam + 0x28u) == 0u || rd(cam + 0x2Cu) != 0u || rd(cam + 0x38u) != 0u)
+        return;
+    const uint32_t yaw = rd(cam + 0xB8u);
+    std::memcpy(rdram + ((sp + 0x124u) & 0x01FFFFFFu), &yaw, 4u);
+}
+
 bool ps2xSwordHungerOff()
 {
+    ps2xPlayHeartbeat();
     static std::atomic<uint64_t> s_version{~0ull};
     static std::atomic<bool> s_off{false};
     const uint64_t version = ps2x::settings::version();
@@ -159,4 +214,95 @@ bool ps2xTexScreenIsBar(const uint8_t *rdram, uint32_t self)
         std::fprintf(stderr, "[texscreen] x %.0f..%.0f y %.0f..%.0f -> %s\n", x0, x1, y0, y1, bar ? "bar, hidden" : "drawn");
     }
     return bar;
+}
+
+// LOCAL PATCH (GitHub issue #23): field of view. [video] fov is a percentage (100 = the original view). It changes the
+// projection distance (HyScreen +0x30) of the MAIN camera's screen only - the one the game widens for 16:9
+// (AdjustDisplayGameAspect, ps2xWidescreenMainScreen) - never the second, un-widened screen the game uses for 3D HUD
+// pieces. The value is changed where it lives and kept changed (not only around the matrix build), so every part of the
+// game that reads it (effects, glows, shadows, culling) sees the same view: changing it only for the matrix put effects
+// in the wrong place (black boxes, a black scroll, a broken health ring at 110 %). Whenever the game writes its own
+// value again it is scaled again; at 100 % the game's own value is put back. Hook: HyScreen::_settingToEnvironment
+// (scripts/runner_patches.py section 15).
+#include "runtime/ps2_settings.h"
+#include <algorithm>
+uint32_t ps2xWidescreenMainScreen(); // ps2_runtime.cpp
+namespace
+{
+    uint32_t g_fovScreen = 0;   // the screen whose distance is changed now (0 = none)
+    float g_fovOriginal = 0.0f; // the game's own value
+    float g_fovWritten = 0.0f;  // the value written there
+}
+void ps2xFovApply(uint8_t *rdram, uint32_t screen)
+{
+    const uint32_t p = screen & 0x1FFFFFFFu;
+    if (!screen || p + 0x34u > 0x2000000u)
+        return;
+    static uint64_t s_version = ~0ull;
+    static float s_scale = 1.0f;
+    if (const uint64_t v = ps2x::settings::version(); v != s_version)
+    {
+        s_version = v;
+        s_scale = static_cast<float>(std::clamp(ps2x::settings::getNumber("video", "fov"), 70, 150)) / 100.0f;
+    }
+    float current;
+    std::memcpy(&current, rdram + p + 0x30u, 4u);
+    bool ours = g_fovScreen == screen && current == g_fovWritten;
+    // LOCAL PATCH (save states): a loaded state can hold a distance this mod wrote at another FOV setting (or in another
+    // session). It is recognised as a known original divided by a whole percentage 70..150, so it is not scaled twice.
+    if (!ours && screen == ps2xWidescreenMainScreen())
+    {
+        const float bases[2] = {g_fovOriginal, 554.3f};
+        for (const float base : bases)
+        {
+            if (!(base > 1.0f) || !(current > 1.0f))
+                continue;
+            const float pct = base / current * 100.0f;
+            const float whole = std::round(pct);
+            if (whole >= 70.0f && whole <= 150.0f && whole != 100.0f && std::fabs(pct - whole) < 0.02f)
+            {
+                g_fovScreen = screen;
+                g_fovOriginal = base;
+                g_fovWritten = current;
+                ours = true;
+                std::fprintf(stderr, "[fov] loaded view distance %.1f recognised as %.0f %% of %.1f\n", current, whole, base);
+                break;
+            }
+        }
+    }
+    const bool main = screen == ps2xWidescreenMainScreen();
+    if (!main || (s_scale > 0.999f && s_scale < 1.001f))
+    {
+        if (ours) // back to the game's own view (setting back at 100 %)
+            std::memcpy(rdram + p + 0x30u, &g_fovOriginal, 4u);
+        if (g_fovScreen == screen)
+            g_fovScreen = 0;
+        return;
+    }
+    const float original = ours ? g_fovOriginal : current; // the game wrote its own value again: that is the base
+    if (!(original > 1.0f && original < 100000.0f)) // not a projection distance: left alone
+        return;
+    const float wanted = original / s_scale;
+    if (ours && wanted == current)
+        return;
+    std::memcpy(rdram + p + 0x30u, &wanted, 4u);
+    g_fovScreen = screen;
+    g_fovOriginal = original;
+    g_fovWritten = wanted;
+}
+void ps2xFovRestore(uint8_t *, uint32_t)
+{
+    // nothing: the changed value stays (see ps2xFovApply)
+}
+
+// LOCAL DEBUG (infinite health and pits): every hit on Hotsuma in the log - its kind (SPowerData +0xC: 7 / 8 are the
+// game's instant kills), attack type (+0xD), power and his health - so a pit or death zone shows how it kills.
+void ps2xPlayerHitTrace(uint8_t *rdram, uint32_t player, uint32_t power)
+{
+    if (!player || !power)
+        return;
+    auto rd32 = [rdram](uint32_t a) { int32_t v; std::memcpy(&v, rdram + (a & 0x01FFFFFFu), 4u); return v; };
+    const uint8_t kind = rdram[(power + 0xCu) & 0x01FFFFFFu];
+    const uint8_t type = rdram[(power + 0xDu) & 0x01FFFFFFu];
+    std::fprintf(stderr, "[player-hit] kind=%u type=%u power=%d hp=%d\n", kind, type, rd32(power), rd32(player + 0x32Cu));
 }

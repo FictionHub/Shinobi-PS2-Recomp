@@ -2210,7 +2210,7 @@ void PS2DebugPanel::draw(PS2Runtime &runtime)
     // F2, or the switch in the settings menu (F1).
     m_visible = ps2x::settings::getBool("advanced", "debug_panel");
     // LOCAL PATCH: Shift+F2 (F2 alone shows / hides the performance overlay).
-    if (IsKeyPressed(KEY_F2) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+    if (IsKeyPressed(KEY_F2) && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))) // LOCAL PATCH: Ctrl+Shift+F2 (Shift+F2 is load state)
     {
         m_visible = !m_visible;
         ps2x::settings::set("advanced", "debug_panel", m_visible ? "true" : "false");

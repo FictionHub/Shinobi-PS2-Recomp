@@ -1024,3 +1024,29 @@ namespace ps2_stubs
         setReturnS32(ctx, 1);
     }
 }
+
+// LOCAL PATCH (save states, GitHub #16): the EE CD driver's streaming position and timing.
+namespace ps2_stubs
+{
+void ps2xCdSaveState(ps2x::savestate::Writer &out)
+{
+    out.section("ee-cd");
+    out.pod(g_cdStreamTiming);
+    out.u32(g_cdStreamingLbn);
+    out.u32(g_cdStreamingEndLbn);
+    out.pod(g_lastCdError);
+    out.u32(g_cdMode);
+}
+
+bool ps2xCdLoadState(ps2x::savestate::Reader &in)
+{
+    if (!in.section("ee-cd"))
+        return false;
+    in.pod(g_cdStreamTiming);
+    g_cdStreamingLbn = in.u32();
+    g_cdStreamingEndLbn = in.u32();
+    in.pod(g_lastCdError);
+    g_cdMode = in.u32();
+    return !in.failed();
+}
+} // namespace ps2_stubs

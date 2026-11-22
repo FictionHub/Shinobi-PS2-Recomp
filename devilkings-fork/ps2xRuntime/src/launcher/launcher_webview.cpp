@@ -1483,8 +1483,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         std::error_code ec;
         const fs::path released = g_root / "bin" / "Shinobi.exe";
         const fs::path built = g_root / "devilkings-fork/out/build/ps2xRuntime/ps2EntryRunner.exe";
-        // A release folder has bin\Shinobi.exe, or (just downloaded) bin\Shinobi.zip that is unpacked into it.
-        const bool inRelease = fs::exists(released, ec) || fs::exists(g_root / "bin" / "Shinobi.zip", ec);
+        // A release folder has bin\Shinobi.exe, or (just downloaded) bin\Shinobi.pack / bin\Shinobi.zip that is unpacked
+        // into it. LOCAL PATCH (GitHub issue #13): Shinobi.pack counts too (a fresh v0.6.0 install has only that, so the
+        // launcher took itself for a development folder), and anything that is not a development folder (no build there)
+        // is a release folder.
+        const bool inRelease = fs::exists(released, ec) || fs::exists(g_root / "bin" / "Shinobi.pack", ec) ||
+                               fs::exists(g_root / "bin" / "Shinobi.zip", ec) || !fs::exists(built, ec);
         g_runner = fs::path(g_mine.get("paths", "runner", (inRelease ? released : built).string()));
     }
     g_page = fs::path(g_mine.get("paths", "page", (g_root / "launcher_assets/launcher.html").string()));
@@ -1550,7 +1554,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
             say("progress 0.02 Unpacking the game program");
             if (!unpackGameProgram())
             {
-                say("error The game program (bin\\Shinobi.zip) could not be unpacked.");
+                say("error The game program (bin\\Shinobi.pack) could not be unpacked. Re-download the game, or check that "
+                    "your antivirus has not quarantined files in the bin folder.");
                 return 2;
             }
             const launcher::iso::Check check = launcher::iso::check(image, kBootFile);

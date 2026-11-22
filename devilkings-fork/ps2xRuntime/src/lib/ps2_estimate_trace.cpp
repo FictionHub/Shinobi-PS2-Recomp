@@ -7,6 +7,8 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <cstdlib>
+#include <thread>
 
 namespace
 {
@@ -39,10 +41,43 @@ namespace
     }
 }
 
+namespace ps2x::pcsx2gs
+{
+    bool startCapture(double seconds); // gs/gs_pcsx2.cpp
+}
+
+// LOCAL PATCH: the stage-clear results screen is on (its EstimateMain / CheckMenu / CheckSubMenu run every frame while
+// it shows): gs/gs_pcsx2.cpp fixes its depth test (the missing rank and menu words) only then.
+#include <atomic>
+#include <chrono>
+static std::atomic<int64_t> g_resultsMs{INT64_MIN / 2};
+static int64_t resultsNowMs()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+bool ps2xResultsScreenActive()
+{
+    return resultsNowMs() - g_resultsMs.load(std::memory_order_relaxed) < 250; // the screen calls it every frame
+}
+
 void ps2xEstimateTrace(const uint8_t *rdram, const char *what, uint32_t a0, uint32_t a1, uint32_t a2)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
     const std::string w = what;
+    if (w == "EstimateMain" || w == "CheckMenu" || w == "CheckSubMenu")
+        g_resultsMs.store(resultsNowMs(), std::memory_order_relaxed);
+    // LOCAL PATCH (diagnostics, the missing rank / menu words): with diagnostics on (Mod Menu > Record diagnostics), the
+    // first stage-clear screen of a run records its drawing by itself (25 s) - no key to press.
+    if (w == "EstimateMain" && std::getenv("PS2X_IOP_WATCH"))
+    {
+        static bool s_captured = false;
+        if (!s_captured)
+        {
+            s_captured = true;
+            std::fprintf(stderr, "[results] stage clear: recording its drawing (automatic)\n");
+            std::thread([]() { ps2x::pcsx2gs::startCapture(25.0); }).detach();
+        }
+    }
     if (w == "CheckMenu" || w == "CheckSubMenu" || w == "EstimateMain" || w == "CheckLoad")
     {
         static uint64_t s_last[4] = {~0ull, ~0ull, ~0ull, ~0ull};

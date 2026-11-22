@@ -419,6 +419,7 @@ add_library(ps2_runtime STATIC
     src/lib/ps2_scarf_collide.cpp
     src/lib/ps2_framegen.cpp
     src/lib/ps2_cri_rna.cpp
+    src/lib/ps2_savestate.cpp
     src/lib/ps2_player_textures.cpp
     src/launcher/launcher_settings_map.cpp
     src/lib/games_database.cpp

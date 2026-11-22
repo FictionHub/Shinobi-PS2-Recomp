@@ -9,6 +9,7 @@
 
 namespace ps2x::iop::detail
 {
+    struct IopSaveStateAccess;
     // SPU2 sound processor: two cores of 24 ADPCM voices with ADSR envelopes,
     // AutoDMA PCM input and a 48 kHz stereo output that the host drains.
     // Register storage stays with IopMemory; this class mirrors every 16-bit
@@ -22,6 +23,7 @@ namespace ps2x::iop::detail
 
     class Spu2
     {
+        friend struct IopSaveStateAccess; // LOCAL PATCH (save states): iop_emulator.cpp
     public:
         static constexpr uint32_t kBase = 0x1F900000u;
         static constexpr uint32_t kEnd = 0x1F900800u;

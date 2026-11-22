@@ -404,10 +404,12 @@ print('fair final boss hooks added:', n, '(0 = already done; 16 on a fresh runne
 # ---- 11. Infinite health mod (ps2_hud_mod.cpp ps2xInfiniteHealth, [game] infinite_health). CPlayer::Damage (0x24e010)
 # subtracts the hit's damage from the health (+0x32C) from 0x24e1c8 on. Just before that, while the mod is on, it ends the
 # way it does for a hit the game ignores (label 0x24e588: returns 3 = "no effect"), so no hit costs health. The floor
-# damage and the other hit routes reach this same function through its virtual call.
+# damage and the other hit routes reach this same function through its virtual call. Hits of kind 7 / 8 (SPowerData +0xC:
+# the game's instant kills - pits, death zones) still go through: the game lets them past invincibility too, and stopping
+# them left Hotsuma stuck alive in the pit.
 DMG_PLAYER = 'Damage__7CPlayerFP7IzPointP10SPowerData_0x24e010.cpp'
 n = fair_hook(DMG_PLAYER, 0x24E1A4,
-              '    { extern bool ps2xInfiniteHealth(); if (ps2xInfiniteHealth()) goto label_24e588; } // LOCAL PATCH (infinite health)'+chr(10),
+              '    { extern void ps2xPlayerHitTrace(uint8_t *, uint32_t, uint32_t); ps2xPlayerHitTrace(rdram, GPR_U32(ctx, 21), GPR_U32(ctx, 19)); } // LOCAL PATCH (player hit log)'+chr(10)+'    { extern bool ps2xInfiniteHealth(); const uint8_t kind = READ8(ADD32(GPR_U32(ctx, 19), 12)); if (ps2xInfiniteHealth() && kind != 7u && kind != 8u) goto label_24e588; } // LOCAL PATCH (infinite health; pits and death zones (kinds 7 / 8) still kill)'+chr(10),
               'LOCAL PATCH (infinite health)')
 print('infinite health hook added:', n, '(0 = already done)')
 
@@ -447,4 +449,33 @@ n += fair_hook(MOVEPAD, 0x2E66D8, AIMX, 'LOCAL PATCH (mouse aim x)')
 n += fair_hook(MOVEPAD, 0x2E670C, AIMY, 'LOCAL PATCH (mouse aim y)')
 n += fair_hook(OTHERFOLLOW, 0x2E69A0, AIMY, 'LOCAL PATCH (mouse aim y)')
 print('mouse aim hooks added:', n, '(0 = already done; 3 on a fresh runner)')
+# LOCAL PATCH (mouse camera did not turn): _MovePad reads the camera stick only when PadGetPush says a right-stick direction is
+# pushed (0x2e66b8); a mouse alone never pushed it. After that call, while mouse movement waits, the answer is yes.
+n = fair_hook(MOVEPAD, 0x2E66C0, '    { extern bool ps2xMouseAimWants(); if (GPR_U32(ctx, 2) == 0u && ps2xMouseAimWants()) SET_GPR_U32(ctx, 2, 1u); } // LOCAL PATCH (mouse wants the camera)' + chr(10), 'LOCAL PATCH (mouse wants the camera)')
+print('mouse camera push hook added:', n)
 
+# ---- 15. Field of view (GitHub issue #23; ps2_hud_mod.cpp ps2xFovApply / ps2xFovRestore). HyScreen::_settingToEnvironment
+# reads the screen's projection distance (HyScreen +0x30, 554.3 in a stage) for the two calls that build the 3D view
+# (func_1A49B0 at 0x332310, func_351950 at 0x33235c). Just before the first, the distance is scaled by the [video] fov
+# setting (a shorter distance = a wider view); just after the second it is put back, so the game's own value never
+# changes.
+SETENV = '_settingToEnvironment__8HyScreenFv_0x3322c0.cpp'
+n = 0
+n += fair_hook(SETENV, 0x332310, '    { extern void ps2xFovApply(uint8_t *, uint32_t); ps2xFovApply(rdram, GPR_U32(ctx, 19)); } // LOCAL PATCH (fov apply)' + chr(10), 'LOCAL PATCH (fov apply)')
+n += fair_hook(SETENV, 0x332364, '    { extern void ps2xFovRestore(uint8_t *, uint32_t); ps2xFovRestore(rdram, GPR_U32(ctx, 19)); } // LOCAL PATCH (fov restore)' + chr(10), 'LOCAL PATCH (fov restore)')
+print('field of view hooks added:', n, '(0 = already done; 2 on a fresh runner)')
+
+# ---- 16. No camera recentering (GitHub issue #22; ps2_hud_mod.cpp ps2xCameraKeepYaw). In CCameraManage::_FollowTarget,
+# just after VectorToRotation (0x2e5c14) has put the yaw from the camera's trailing position into sp+0x124, that yaw is
+# replaced by the camera's own when the mod is on.
+n = fair_hook('ps2__FollowTarget__13CCameraManageFP10CameraBase_0x2e59c0.cpp', 0x2E5C1C,
+              '    { extern void ps2xCameraKeepYaw(uint8_t *, uint32_t, uint32_t, uint32_t); ps2xCameraKeepYaw(rdram, GPR_U32(ctx, 18), GPR_U32(ctx, 17), GPR_U32(ctx, 29)); } // LOCAL PATCH (no camera recentering)' + chr(10),
+              'LOCAL PATCH (no camera recentering)')
+print('no camera recentering hook added:', n, '(0 = already done; 1 on a fresh runner)')
+
+# ---- 17. Final boss health (ps2_fair_boss.cpp ps2xFinalBossHealth): in CEc380 KNOCK_BACK, just before the boss gauge is
+# created from Hiruko's health (lw a1, 0x32C(a0) at 0x319888), the health is reduced to the chosen share.
+n = fair_hook('KNOCK_BACK__15CEc380AnimationFii_0x319540.cpp', 0x319888,
+              '    { extern void ps2xFinalBossHealth(uint8_t *, uint32_t); ps2xFinalBossHealth(rdram, GPR_U32(ctx, 4)); } // LOCAL PATCH (final boss health)' + chr(10),
+              'LOCAL PATCH (final boss health)')
+print('final boss health hook added:', n, '(0 = already done; 1 on a fresh runner)')
