@@ -6,9 +6,9 @@
 
 **v0.6.0:** Languages (Japanese, French, German, Italian, Spanish), a Jukebox for all 30 music tracks, IMAX story movies, true 1:1 mouse aiming, a rebuilt launcher and half the download (67 MB to 35 MB). **[Download v0.6.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack 1](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 235 textures, the HUD, menus and Stage 1, growing every update) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.6.0)
 
-<p align="center"><img src="docs/screenshots/v0.6/banner.jpg" width="100%"><br><sub>Shinobi PS2 Recomp v0.6.</sub></p>
+<p align="center"><img src="docs/screenshots/v0.7/banner.jpg" width="100%"><br><sub>Shinobi PS2 Recomp v0.7.</sub></p>
 
-<p align="center"><img src="docs/screenshots/v0.6/gameplay-hd-hud-340fps.jpg" width="100%"><br><sub>Stage 1 with HD Texture Pack 1: the HD HUD, at 340 FPS with frame generation.</sub></p>
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.7/stage2-hd-off.jpg"><br><sub>Stage 2, original textures.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.7/stage2-hd-on.jpg"><br><sub>Stage 2 with HD Texture Pack v2 (Shift+F5 switches it live).</sub></td></tr></table>
 
 **v0.5.3:** Runs on older CPUs too (no AVX2 needed), HD texture packs you can switch live with **Shift+F5**, and a download 40% smaller (111 MB to 67 MB) with nothing taken out. The HD HUD is a work in progress: more of it gets upscaled with every update. [More below](#v053-hd-textures-older-cpus-and-a-smaller-download).
 
@@ -50,6 +50,48 @@ Reddit: <https://www.reddit.com/user/Afsan23/>
 The game's own program is translated ("recompiled") to run natively on Windows. PCSX2's graphics (GS) and sound (SPU2) code is used for the parts that have to match the PS2 exactly.
 
 ---
+
+## v0.7: save states, FOV slider, a PC mouse + keyboard layout and 13 fixes
+
+**[Download v0.7.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.7.0)** (29.6 MB, the smallest yet) · **[HD Texture Pack v2](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/tag/v2)** (372 textures, now with Stage 2). Most of this update came from your GitHub issues and Reddit comments: thank you.
+
+### Save states, 3 slots (#16)
+
+**Ctrl+1 / 2 / 3** picks a slot, **Ctrl+F1** saves exactly where you are and **Ctrl+F2** puts you back there, in a fifth of a second, with graphics, sound and music as they were. The F1 menu has the same, and shows when each slot was saved. States still work after restarting the game.
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.7/save-state-slots.jpg"><br><sub>Pick a slot in the F1 menu, then Save or Load.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.7/save-state-keys.jpg"><br><sub>Or straight from the keyboard.</sub></td></tr></table>
+
+### Field of View slider (#23) and no camera recentering (#22)
+
+Launcher > Graphics > **Field of View**, 70% to 150%, live in game: it changes the camera's real projection, so effects and the HUD stay in place. **No camera recentering** (Mod Menu) keeps the angle you give the camera instead of swinging it behind Hotsuma whenever he runs sideways.
+
+<p align="center"><img src="docs/screenshots/v0.7/launcher-fov.jpg" width="100%"><br><sub>Field of View, live.</sub></p>
+
+### A PC mouse and keyboard layout (#20)
+
+Left click = sword, right click = lock on, wheel = next target, middle click = ninjutsu; Q shuriken, E next ninjutsu, R lock on, F camera reset, C jump, Space dash. Everything can be rebound, mouse buttons 1-5 included, and the mouse works in the game's own menus too. WASD no longer changes the ninjutsu scroll, and the mouse camera turns properly.
+
+### Shortcuts panel (H), new Mod Menu, final boss health
+
+Press **H** in game for every hotkey and mod with its state. The Mod Menu has category tabs now (L1/R1), and the final boss's health can be turned down (his health and damage match the PS2 exactly: he really is that tanky). **Ctrl+R twice** restarts the game without the launcher.
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.7/shortcuts-panel.jpg"><br><sub>H: every shortcut, with live ON/OFF.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.7/mod-menu-tabs.jpg"><br><sub>The new Mod Menu, with tabs.</sub></td></tr></table>
+
+<p align="center"><img src="docs/screenshots/v0.7/final-boss-health.jpg" width="100%"><br><sub>Final boss health: Original, 75%, 50% or 33%.</sub></p>
+
+### HD Texture Pack v2
+
+372 textures (v1 had 235): all of Stage 2, more of the menus and more of Stage 1. Extract it into the game folder (the one with `Shinobi Launcher.exe`); the textures must end up in `textures\SLUS-20459\replacements`.
+
+<p align="center"><img src="docs/screenshots/v0.7/extra-menu-hd.jpg" width="100%"><br><sub>The Extra menu with HD Texture Pack v2.</sub></p>
+
+### Fixes and the launcher
+
+Sound effects no longer vanish after about 10 Retries (#17); "Game not found" on a fresh install (#13) and the same setup failure in RecompLauncher / Wine (#15) are fixed; the blue line in the 7-A cutscene is gone (#18); the results screen shows its rank and NEXT / RETRY / QUIT again; pits kill properly with Infinite health on; Enter works in every menu and skips cutscenes; DualSense over Bluetooth reconnects by itself. About 7% less CPU at 60 fps, a Game Volume slider, and the download is down to 29.6 MB.
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.7/launcher-new-list.jpg"><br><sub>What's new, on the launcher's Feature Set page.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.7/launcher-fixed-list.jpg"><br><sub>And what's fixed, with the GitHub issue numbers.</sub></td></tr></table>
+
+<table><tr><td width="50%" align="center"><img src="docs/screenshots/v0.7/launcher-game-volume.jpg"><br><sub>Game Volume.</sub></td><td width="50%" align="center"><img src="docs/screenshots/v0.7/overlay-359fps.jpg"><br><sub>359 FPS with frame generation (performance overlay, F2).</sub></td></tr></table>
 
 ## v0.6: languages, jukebox, IMAX movies, 1:1 mouse aiming and a rebuilt launcher
 
