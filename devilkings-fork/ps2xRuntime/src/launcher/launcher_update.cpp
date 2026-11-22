@@ -180,6 +180,32 @@ namespace launcher::update
         }
     }
 
+    // LOCAL PATCH (smaller download, v0.7): the studio intro video is off by default, so it is no longer in the release
+    // zip. The first time it is switched on it is fetched from the v0.7.0 release (a fixed address, so later releases need
+    // not carry it again). Any failure just means no intro this time: the game skips a missing video by itself.
+    bool studioIntro(const fs::path &root, const fs::path &video)
+    {
+        std::error_code ec;
+        if (fs::exists(video, ec))
+            return true;
+        std::smatch m;
+        const std::string manifest = readFile(root / "recomplauncher.json");
+        if (!std::regex_search(manifest, m, std::regex("\"repo\"\\s*:\\s*\"([^\"]+)\"")))
+            return false;
+        const std::string url = "https://github.com/" + m[1].str() + "/releases/download/v0.7.0/studio_intro.mp4";
+        fs::create_directories(video.parent_path(), ec);
+        const fs::path part = video.wstring() + L".part";
+        std::fprintf(stderr, "[launcher] studio intro switched on: downloading %s\n", url.c_str());
+        if (get(widen(url), nullptr, &part, nullptr) && fs::file_size(part, ec) > 100000)
+        {
+            fs::rename(part, video, ec);
+            return !ec;
+        }
+        fs::remove(part, ec);
+        std::fprintf(stderr, "[launcher] studio intro could not be downloaded; the game starts without it\n");
+        return false;
+    }
+
     void cleanup(const fs::path &root)
     {
         std::error_code ec;

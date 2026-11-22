@@ -761,6 +761,12 @@ namespace
 
     bool startGame(std::string &error)
     {
+        // LOCAL PATCH (v0.7): the studio intro video comes from the release only when it is switched on.
+        {
+            const std::string on = g_game.get("game", "studio_intro", "false");
+            if (on == "true" || on == "1")
+                launcher::update::studioIntro(g_root, g_gameDir / "intro" / "studio_intro.mp4");
+        }
         // The game program is built twice: for AVX2 (bin/Shinobi.exe, faster) and for any SSE4.1 CPU (bin/Shinobi-SSE4.exe,
         // 2008 and newer, the same minimum as PCSX2). On a CPU without what a program needs Windows would close it at once
         // with no message, so the right one is picked here. SHINOBI_FORCE_SSE4=1 starts the fallback on any PC (testing).

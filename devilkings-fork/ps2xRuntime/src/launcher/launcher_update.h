@@ -26,4 +26,7 @@ namespace launcher::update
     };
     // Starts the fetch when needed (in the background) and says where it is.
     OldCpuBuild oldCpuBuild(const std::filesystem::path &root, int *percent = nullptr, std::string *error = nullptr);
+    // LOCAL PATCH (v0.7): fetches game/intro/studio_intro.mp4 (not in the zip) when the studio intro is switched on.
+    // Blocking, about 2 MB; false when it could not be fetched (the game then starts without the intro).
+    bool studioIntro(const std::filesystem::path &root, const std::filesystem::path &video);
 }

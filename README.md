@@ -27,7 +27,7 @@
 
 **Or from GitHub:**
 
-1. Open **[Releases](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases)** and download the newest **Shinobi-PS2-Recomp-v…-Windows-x64.zip** (67 MB). Right-click it and choose **Extract All...** (any folder except Program Files).
+1. Open **[Releases](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases)** and download the newest **Shinobi-PS2-Recomp-v…-Windows-x64.zip** (30 MB). Right-click it and choose **Extract All...** (any folder except Program Files).
 2. Run **`Shinobi Launcher.exe`** (it is in the main folder you just unzipped).
 3. Press **Game File**, choose your own Shinobi (USA) disc image, press **Set up game files**, then **Play Game**.
 

@@ -103,8 +103,20 @@ namespace launcher::pack
             r.at += length;
             e.size = r.get<uint64_t>();
             e.crc = r.get<uint32_t>();
-            // Only plain file names: nothing may land outside the folder.
-            if (!r.ok || e.name.empty() || e.name.find_first_of("/\\:") != std::string::npos || e.name.find("..") != std::string::npos)
+            // Plain names, or a relative path with '/' (v0.7: the graphics DLLs, pcsx2-gs-bridge/...). Nothing may land
+            // outside the folder: no '\', ':', leading '/', empty or ".." parts.
+            bool safe = r.ok && !e.name.empty() && e.name.find_first_of("\\:") == std::string::npos && e.name.front() != '/' &&
+                        e.name.back() != '/' && e.name.find("//") == std::string::npos;
+            for (size_t p = 0; safe && p <= e.name.size();)
+            {
+                size_t q = e.name.find('/', p);
+                if (q == std::string::npos)
+                    q = e.name.size();
+                const std::string part = e.name.substr(p, q - p);
+                safe = part != "." && part != "..";
+                p = q + 1;
+            }
+            if (!safe)
                 return "The game program package is damaged.";
             total += e.size;
         }
@@ -146,8 +158,12 @@ namespace launcher::pack
             const uint8_t *data = out.data() + at;
             if (crc32(data, static_cast<size_t>(e.size)) != e.crc)
                 return "The game program package is damaged (" + e.name + " does not check out).";
-            const fs::path target = folder / fs::path(std::u8string(e.name.begin(), e.name.end()));
+            const fs::path target = (folder / fs::path(std::u8string(e.name.begin(), e.name.end()))).make_preferred();
             const fs::path temp = target.wstring() + L".unpacking";
+            {
+                std::error_code dirError;
+                fs::create_directories(target.parent_path(), dirError);
+            }
             {
                 std::ofstream o(temp, std::ios::binary | std::ios::trunc);
                 o.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(e.size));
