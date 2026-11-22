@@ -537,6 +537,11 @@ namespace ps2x::settings
                                {"Centralizado", "Nas bordas", "Esticado"}, 0, 0, nullptr, false};
                 hud.choiceEnvironment = {"", "edges", "stretch"};
                 add(hud);
+                // LOCAL PATCH (round HUD in widescreen, ps2_hud_mod.cpp ps2xHud2DSqueeze): live.
+                add({"video", "hud_shape", "HUD in widescreen",
+                     "Round keeps the HUD's real shape on a wide screen (a round health ring); Stretched widens it with "
+                     "the picture, as the original widescreen hack does.",
+                     Kind::Choice, "round", nullptr, {"round", "stretched"}, {"Round", "Stretched"}, 0, 0, nullptr, true});
             }
             add({"video", "filter", "Filtro da imagem",
                  "Nítido mostra os pixels; suave os mistura ao ampliar; scanlines e CRT imitam a TV.", Kind::Choice,

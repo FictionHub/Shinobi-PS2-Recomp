@@ -642,6 +642,7 @@ template = must_replace(template, '        </sc-if>\n        <sc-if value="{{tab
 # ---- LOCAL PATCH: the Feature Set page: everything the recomp does now, and what is planned. Edit the lists here. ----
 FEATURES_NOW = [
     ('Graphics', [
+        ('Round HUD in widescreen', ''),
         ('Field of View slider (#23)', ''),
         ('Up to 4K and 8K resolution (D3D11 or Vulkan)', ''),
         ('Widescreen: 16:9, 21:9, 32:9 and Auto', ''),
@@ -720,6 +721,7 @@ FEATURES_NOW = [
 ]
 # LOCAL PATCH: new in this version: these rows get gold sparks and a NEW tag on the Feature Set page.
 FEATURES_NEW = {
+    'Round HUD in widescreen',
     'Field of View slider (#23)',
     'HD Texture Pack v2: 372 textures',
     'Lighter on the CPU',
@@ -740,6 +742,8 @@ FEATURES_NEW = {
 # LOCAL PATCH: fixed in this version (text, tag: a GitHub issue number or '' for FIXED). Shown between "Available now"
 # and "Coming in future updates".
 FEATURES_FIXED = [
+    ('European languages: black screen at start', ''),
+    ('HUD stretched in 16:9 (round again)', ''),
     ('Sound effects lost after about 10 Retries', '#17'),
     ('"Game not found" on a fresh install', '#13'),
     ('RecompLauncher / Wine setup failing', '#15'),
@@ -2287,7 +2291,7 @@ L("""win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, bind: s.bin
   """win: s.win, haptics: s.haptics, hapStr: s.hapStr, trig: s.trig, texf: s.texf, scrf: s.scrf, dith: s.dith, mip: s.mip, upfix: s.upfix, ovl: s.ovl, cam: s.cam, lvoice: s.lvoice || 'en', ltext: s.ltext || 'en', bind: s.bind""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
-    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('norecenter', s.norecenter ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('bosshp', s.bosshp || '50'); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('fov', s.fov || '100'); add('lvoice', s.lvoice || 'en'); add('ltext', s.ltext || 'en'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
+    add('texf', s.texf || 'ps2'); add('scrf', s.scrf || 'smooth'); add('dith', s.dith !== false ? 1 : 0); add('mip', s.mip !== false ? 1 : 0); add('upfix', s.upfix !== false ? 1 : 0); add('ovl', s.ovl ? 1 : 0); add('cam', s.cam ? 1 : 0); add('hud', s.hud ? 1 : 0); add('bars', s.bars ? 1 : 0); add('scol', s.scol !== false ? 1 : 0); add('noscarf', s.noscarf ? 1 : 0); add('nohunger', s.nohunger ? 1 : 0); add('norecenter', s.norecenter ? 1 : 0); add('roundhud', s.roundhud !== false ? 1 : 0); add('unlockall', s.unlockall ? 1 : 0); add('fairboss', s.fairboss ? 1 : 0); add('bosshp', s.bosshp || '50'); add('infhealth', s.infhealth ? 1 : 0); add('vol', s.vol || '100'); add('fov', s.fov || '100'); add('lvoice', s.lvoice || 'en'); add('ltext', s.ltext || 'en'); add('hdtex', s.hdtex !== false ? 1 : 0); add('dumptex', s.dumptex ? 1 : 0); add('fg', s.fg ? 1 : 0); add('lowlat', s.lowlat ? 1 : 0); add('fgt', s.fgt || 'monitor');""")
 L("""[['display', 'Display'], ['graphics', 'Graphics'], ['controller', 'Controller']]""",
   """[['display', 'Display'], ['graphics', 'Graphics'], ['effects', 'Effects'], ['perf', 'FPS'], ['jukebox', 'Jukebox'], ['languages', 'Languages'], ['controller', 'Controls'], ['features', 'Feature Set']]""")
 L("""      tabController: s.tab === 'controller',""",
@@ -2364,7 +2368,7 @@ L("""    const init = window.__launcherInit || null;""",
       l1: 'l1', r1: 'r1', l2: 'l2', r2: 'r2', start: 'start', select: 'select', l3: 'l3', r3: 'r3' };
     const init = window.__launcherInit || null;""")
 L("""bind: s.bind, mods: s.mods });""",
-  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, norecenter: !!s.norecenter, unlockall: !!s.unlockall, fairboss: !!s.fairboss, bosshp: s.bosshp || '50', infhealth: !!s.infhealth, hdtex: s.hdtex !== false, dumptex: !!s.dumptex, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', vol: s.vol || '100', fov: s.fov || '100', mods: s.mods });""")
+  """bind: s.bind, pbind: s.pbind, invX: !!s.invX, invY: !!s.invY, ovl: !!s.ovl, cam: !!s.cam, hud: !!s.hud, bars: !!s.bars, scol: s.scol !== false, noscarf: !!s.noscarf, nohunger: !!s.nohunger, norecenter: !!s.norecenter, roundhud: s.roundhud !== false, unlockall: !!s.unlockall, fairboss: !!s.fairboss, bosshp: s.bosshp || '50', infhealth: !!s.infhealth, hdtex: s.hdtex !== false, dumptex: !!s.dumptex, fg: !!s.fg, lowlat: !!s.lowlat, fgt: s.fgt || 'monitor', vol: s.vol || '100', fov: s.fov || '100', mods: s.mods });""")
 L("""add('trig', s.trig ? 1 : 0);""",
   """add('trig', s.trig ? 1 : 0);
     add('invX', s.invX ? 1 : 0); add('invY', s.invY ? 1 : 0);
@@ -2452,6 +2456,7 @@ L("""    const modRows = MODS.map((m) => ({""",
     const GAME_MODS = [
       ['cam', 'Close-up camera (F3)', 'A closer, over-the-shoulder camera for more intimate combat.', false, 'camera'],
       ['norecenter', 'No camera recentering', 'The camera keeps your angle instead of swinging behind Hotsuma as he runs. The right stick and camera reset still work.', false, 'camera'],
+      ['roundhud', 'Round HUD in widescreen', 'On a wide screen the HUD keeps its real shape: a round health ring, narrow kunai, each piece at its own edge. Off: stretched with the picture, as the original widescreen hack.', true, 'look'],
       ['hud', 'Hide HUD (F5)', 'Health, kunai, magic, TATE counter and boss gauges hidden for a clean screen.', false, 'look'],
       ['bars', 'IMAX mode (F7)', 'Full-screen TATE finishing moves: no black bars. Movies and story scenes keep theirs.', false, 'look'],
       ['unlockall', 'Unlock everything (Shift+F6)', 'Every difficulty, character and extra open from the start. Your save is not changed.', false, 'gameplay'],

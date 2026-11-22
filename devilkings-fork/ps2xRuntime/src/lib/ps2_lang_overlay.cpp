@@ -36,6 +36,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace
@@ -279,8 +280,11 @@ namespace
         const uint64_t usIsoSectors = g.usSectors - kCvmIsoSector;
         uint64_t nextLbn = usIsoSectors;
         std::unordered_map<uint64_t, uint64_t> appendedAt; // European source offset -> its ISO sector (shared targets)
-        int swapped = 0, missing = 0;
-        for (const auto &[name, ref] : usFiles)
+        int swapped = 0, missing = 0, inPlace = 0;
+        constexpr uint64_t kPending = ~0ull;
+        std::vector<std::pair<size_t, uint64_t>> pendingRecords; // directory record -> European source offset
+        // What a US file's record should point at: (target name, from the European disc).
+        const auto decide = [&](const std::string &name) -> std::pair<std::string, bool>
         {
             std::string target;
             char lang = 'E';
@@ -293,7 +297,9 @@ namespace
             {
                 // the European scripts / story movies / English cutscene dubs, timed with the European subtitles
                 const bool script = name.size() > 4 && name.compare(name.size() - 4, 4, ".EVD") == 0;
-                const bool movie = name.size() == 14 && eventStem(name) && name.compare(10, 4, ".SFD") == 0;
+                // (PS2X_LANG_US_MOVIES=1 keeps the US story movies: test hook)
+                static const bool s_usMovies = std::getenv("PS2X_LANG_US_MOVIES") != nullptr;
+                const bool movie = !s_usMovies && name.size() == 14 && eventStem(name) && name.compare(10, 4, ".SFD") == 0;
                 if (script || movie)
                     target = name, fromEu = true;
             }
@@ -306,8 +312,22 @@ namespace
                 if (dub || sub)
                     fromEu = true;
             }
+            return {target, fromEu};
+        };
+        // US files another record still reads (a Japanese voice in place of an English one, ...): never overwritten.
+        std::unordered_set<std::string> usStillRead;
+        for (const auto &[name, ref] : usFiles)
+        {
+            const auto [target, fromEu] = decide(name);
+            if (!target.empty() && !fromEu && target != name)
+                usStillRead.insert(target);
+        }
+        for (const auto &[name, ref] : usFiles)
+        {
+            const auto [target, fromEu] = decide(name);
             if (target.empty() || (target == name && !fromEu))
                 continue;
+
             const auto &table = fromEu ? euFilesByName : usFiles;
             const auto src = table.find(target);
             if (src == table.end())
@@ -324,29 +344,66 @@ namespace
                 else
                 {
                     Appended a;
-                    a.isoLbn = nextLbn;
                     a.sectors = (src->second.size + kSector - 1) / kSector;
                     a.srcOffset = src->second.offset;
                     a.size = src->second.size;
+                    // LOCAL PATCH (RecompLauncher report: "with Italian the game will not start"): the game's file
+                    // system (CRI) cannot reach past 2 GB of ROFSSMP.CVM. With the European story movies appended the
+                    // archive reached ~2.2 GB: the opening movie never played (a black screen at boot) and the system
+                    // messages waited ~50 s. A European file now goes into the sectors of the US file it replaces (the
+                    // movies, scripts, voices, text) when it fits and no other record still reads that US file, so
+                    // little is appended.
+                    const uint64_t usSectorsOfName = (ref.size + kSector - 1) / kSector;
+                    if (a.sectors <= usSectorsOfName && ref.offset >= kCvmIsoBase && !usStillRead.count(name))
+                    {
+                        a.isoLbn = (ref.offset - kCvmIsoBase) / kSector;
+                        ++inPlace;
+                    }
+                    else
+                        a.isoLbn = kPending; // placed after the loop, smallest first
                     g.appended.push_back(a);
                     appendedAt[a.srcOffset] = a.isoLbn;
                     lbn = a.isoLbn;
-                    nextLbn += std::max<uint64_t>(1, a.sectors);
                 }
             }
             else
                 lbn = (src->second.offset - kCvmIsoBase) / kSector;
-            if (lbn > 0xFFFFFFFFull || src->second.size > 0xFFFFFFFFull)
+            if (src->second.size > 0xFFFFFFFFull)
                 continue;
-            wr32both(&dir[ref.record + 2], static_cast<uint32_t>(lbn));
+            if (lbn == kPending)
+                pendingRecords.push_back({ref.record, src->second.offset});
+            else if (lbn <= 0xFFFFFFFFull)
+                wr32both(&dir[ref.record + 2], static_cast<uint32_t>(lbn));
+            else
+                continue;
             wr32both(&dir[ref.record + 10], static_cast<uint32_t>(src->second.size));
             ++swapped;
+        }
+        // The European files that did not fit in place go after the US image, smallest first: should a language ever
+        // pass the 2 GB the game's file system reaches, only the biggest (movies) are past it, never text or voices.
+        {
+            std::vector<size_t> order;
+            for (size_t i = 0; i < g.appended.size(); ++i)
+                if (g.appended[i].isoLbn == kPending)
+                    order.push_back(i);
+            std::sort(order.begin(), order.end(), [](size_t a, size_t b) { return g.appended[a].size < g.appended[b].size; });
+            for (const size_t i : order)
+            {
+                g.appended[i].isoLbn = nextLbn;
+                appendedAt[g.appended[i].srcOffset] = nextLbn;
+                nextLbn += std::max<uint64_t>(1, g.appended[i].sectors);
+            }
+            for (const auto &[record, srcOffset] : pendingRecords)
+                wr32both(&dir[record + 2], static_cast<uint32_t>(appendedAt[srcOffset]));
         }
         if (swapped == 0)
             return;
         std::sort(g.appended.begin(), g.appended.end(), [](const Appended &a, const Appended &b) { return a.isoLbn < b.isoLbn; });
         const uint64_t isoSectors = nextLbn;
         g.totalSectors = kCvmIsoSector + isoSectors;
+        if (g.totalSectors * kSector > 0x7FFFFFFFull)
+            std::fprintf(stderr, "[lang] warning: the combined archive is %.0f MB, past the 2 GB the game's file system reaches;"
+                                 " files beyond it will not load\n", double(g.totalSectors * kSector) / 1048576.0);
         if (g.totalSectors * kSector > 0xFFFFFFFFull)
         {
             std::fprintf(stderr, "[lang] the combined image would pass 4 GB: languages off\n");
@@ -365,6 +422,18 @@ namespace
         readAt(g.us, kCvmIsoBase + 16 * kSector, pvd.data(), kSector);
         wr32both(&pvd[80], static_cast<uint32_t>(isoSectors)); // volume space size
         g.patched[kCvmIsoSector + 16] = std::move(pvd);
+        // LOCAL PATCH (Italian etc. took ~50 s to start): the CVM header's own total size (big-endian 64-bit at 0x1C) is
+        // checked by the game's file system (CRI GDFS) too; left at the US size, the first load of an appended European
+        // file (the system messages, SYSMES) was refused and only retried after a 50-second timeout.
+        std::vector<uint8_t> head(kSector);
+        readAt(g.us, 0, head.data(), kSector);
+        if (std::memcmp(head.data(), "CVMH", 4) == 0)
+        {
+            const uint64_t total = g.totalSectors * kSector;
+            for (int i = 0; i < 8; ++i)
+                head[0x1C + i] = static_cast<uint8_t>(total >> (56 - 8 * i));
+            g.patched[0] = std::move(head);
+        }
         std::vector<uint8_t> zone(kSector);
         readAt(g.us, 0x800, zone.data(), kSector);
         if (std::memcmp(zone.data(), "ZONE", 4) == 0)
@@ -372,6 +441,11 @@ namespace
             const uint64_t bytes = isoSectors * kSector; // big-endian 64-bit at 0x830
             for (int i = 0; i < 8; ++i)
                 zone[0x30 + i] = static_cast<uint8_t>(bytes >> (56 - 8 * i));
+            // and +0x08 (big-endian 32-bit): the whole file's size less 0x80C (0x4D5007F4 on the US disc)
+            const uint64_t rest = g.totalSectors * kSector - 0x80Cu;
+            if (rest <= 0xFFFFFFFFull)
+                for (int i = 0; i < 4; ++i)
+                    zone[0x08 + i] = static_cast<uint8_t>(rest >> (24 - 8 * i));
             g.patched[1] = std::move(zone);
         }
         g.active = true;
@@ -386,9 +460,9 @@ namespace
             default: return "English";
             }
         };
-        std::fprintf(stderr, "[lang] voices %s, text %s%s: %d files swapped (%d not found), %zu read from the European disc (%.0f MB)\n",
+        std::fprintf(stderr, "[lang] voices %s, text %s%s: %d files swapped (%d not found), %zu read from the European disc (%d in place of the US file, %.0f MB appended)\n",
                      name(g.voice), name(g.text), g.euMode ? ", European movies and scripts" : "", swapped, missing,
-                     g.appended.size(), double((isoSectors - usIsoSectors) * kSector) / 1048576.0);
+                     g.appended.size(), inPlace, double((isoSectors - usIsoSectors) * kSector) / 1048576.0);
     }
 }
 
@@ -432,10 +506,10 @@ bool ps2xLangOverlayRead(uint64_t sector, uint64_t sectors, uint8_t *dst, size_t
         const size_t at = static_cast<size_t>((it->first - first) * kSector);
         std::memcpy(dst + at, it->second.data(), std::min<size_t>(kSector, bytes - at));
     }
-    // 3. the European files after the US image
-    if (end > g.usSectors)
+    // 3. the European files: after the US image, or (LOCAL PATCH, 2 GB limit) in the sectors of the US file they replace
+    if (end > kCvmIsoSector && !g.appended.empty())
     {
-        const uint64_t isoFirst = std::max(first, g.usSectors) - kCvmIsoSector, isoEnd = end - kCvmIsoSector;
+        const uint64_t isoFirst = first > kCvmIsoSector ? first - kCvmIsoSector : 0, isoEnd = end - kCvmIsoSector;
         auto it = std::upper_bound(g.appended.begin(), g.appended.end(), isoFirst,
                                    [](uint64_t v, const Appended &a) { return v < a.isoLbn; });
         if (it != g.appended.begin())
@@ -445,13 +519,15 @@ bool ps2xLangOverlayRead(uint64_t sector, uint64_t sectors, uint8_t *dst, size_t
             const uint64_t a = std::max(isoFirst, it->isoLbn), b = std::min(isoEnd, it->isoLbn + it->sectors);
             if (a >= b)
                 continue;
-            const uint64_t fileOffset = (a - it->isoLbn) * kSector;
-            if (fileOffset >= it->size)
-                continue;
             const size_t at = static_cast<size_t>((a + kCvmIsoSector - first) * kSector);
             if (at >= bytes)
                 break;
-            const size_t n = static_cast<size_t>(std::min<uint64_t>({(b - a) * kSector, it->size - fileOffset, bytes - at}));
+            const size_t span = static_cast<size_t>(std::min<uint64_t>((b - a) * kSector, bytes - at));
+            std::memset(dst + at, 0, span); // (in place: the rest of the US file's last sector is not shown)
+            const uint64_t fileOffset = (a - it->isoLbn) * kSector;
+            if (fileOffset >= it->size)
+                continue;
+            const size_t n = static_cast<size_t>(std::min<uint64_t>(span, it->size - fileOffset));
             readAt(g.eu, it->srcOffset + fileOffset, dst + at, n);
         }
     }
@@ -464,7 +540,8 @@ int ps2xLangMovieChannel(int requested)
 {
     if (!g.active || (requested != 0 && requested != 1))
         return requested;
-    if (!g.euMode)
+    // (PS2X_LANG_US_MOVIES keeps the US movies in European mode: then their two tracks, as above)
+    if (!g.euMode || std::getenv("PS2X_LANG_US_MOVIES"))
         return g.voice == 'J' ? 0 : 1;
     switch (g.voice)
     {

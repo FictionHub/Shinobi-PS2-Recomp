@@ -479,3 +479,55 @@ n = fair_hook('KNOCK_BACK__15CEc380AnimationFii_0x319540.cpp', 0x319888,
               '    { extern void ps2xFinalBossHealth(uint8_t *, uint32_t); ps2xFinalBossHealth(rdram, GPR_U32(ctx, 4)); } // LOCAL PATCH (final boss health)' + chr(10),
               'LOCAL PATCH (final boss health)')
 print('final boss health hook added:', n, '(0 = already done; 1 on a fresh runner)')
+
+# ---- 18. Round HUD in widescreen (ps2_hud_mod.cpp ps2xHud2D*; Reddit request). At 16:9 the 2D layer is drawn for 4:3 and
+# stretched with the picture, so the health ring and the rest of the HUD come out 33% wide. Each HUD Draw function (the
+# HUD list above) says it is drawing on entry and stops saying so at every return (jr $ra); while it draws, the three 2D
+# draw functions narrow the X of the vertices they are given just before copying them into the drawing packet
+# (KfpSetHyTextureVertex / KfpSetHyPolygonVertex) and put the game's own values back straight after the copy.
+n = 0
+for idx, name in enumerate(HUD):
+    path = os.path.join(D, name + '.cpp')
+    raw = read(path)
+    if 'LOCAL PATCH (round HUD enter)' in raw:
+        continue
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    hide_end = ('        if (ps2xHudHidden())\n        {\n            ctx->pc = GPR_U32(ctx, 31);\n            return;\n'
+                '        }\n    }\n')
+    if hide_end not in t:
+        print('round HUD: hide-HUD hook missing in', name)
+        continue
+    t = t.replace(hide_end, hide_end + '    { extern void ps2xHud2DEnter(int); ps2xHud2DEnter(%d); } // LOCAL PATCH (round HUD enter)\n' % idx, 1)
+    t, k = re.subn(r'(\n)(    // 0x[0-9a-f]+: 0x3e00008  jr          \$ra\n)',
+                   r'\1    { extern void ps2xHud2DLeave(); ps2xHud2DLeave(); } // LOCAL PATCH (round HUD leave)\n\2', t)
+    write(path, t, nl)
+    n += 1
+print('round HUD: HUD draw functions marked:', n, '(0 = already done)')
+# A HUD Draw that ends with a tail jump (j func_..., e.g. DrawKunaiInfo into Draw2DPoly) never reaches its jr $ra: it
+# stops saying it draws after the 2D draw it jumped into has copied its vertices (ps2xHud2DTailLeave / Restore).
+n = 0
+for name in HUD:
+    path = os.path.join(D, name + '.cpp')
+    raw = read(path)
+    if 'LOCAL PATCH (round HUD tail)' in raw:
+        continue
+    nl = '\r\n' if '\r\n' in raw else '\n'
+    t = raw.replace('\r\n', '\n')
+    t, k = re.subn(r'(\n)(    // 0x[0-9a-f]+: 0x[0-9a-f]+  j           func_[0-9A-F]+\n)',
+                   r'\1    { extern void ps2xHud2DTailLeave(); ps2xHud2DTailLeave(); } // LOCAL PATCH (round HUD tail)\n\2', t)
+    if k:
+        write(path, t, nl)
+        n += k
+print('round HUD: tail jumps marked:', n, '(0 = already done)')
+n = 0
+for fname, call, target, back, count, stride, raoff in [
+        ('HyPolygon2DDrawList__FPC15HyTextureVertexiii_0x3373b0.cpp', 0x33745C, 0x355A40, 0x337464, 'GPR_U32(ctx, 6)', 0x18, 0x50),
+        ('HyPolygon2DDrawStrip__FPC15HyTextureVertexii_0x337270.cpp', 0x337314, 0x355A40, 0x33731C, 'GPR_U32(ctx, 6)', 0x18, 0x40),
+        ('HyPolygon2DDrawStrip__FPC15HyPolygonVertexii_0x336f80.cpp', 0x337004, 0x355C20, 0x33700C, 'GPR_U32(ctx, 6)', 0x10, 0x40)]:
+    n += fair_call_arg(fname, target, call,
+                       '    { extern void ps2xHud2DSqueeze(uint8_t *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t); ps2xHud2DSqueeze(rdram, GPR_U32(ctx, 5), %s, GPR_U32(ctx, 7), 0x%x, ADD32(GPR_U32(ctx, 29), 0x%x)); } // LOCAL PATCH (round HUD squeeze)\n' % (count, stride, raoff),
+                       'LOCAL PATCH (round HUD squeeze)')
+    n += fair_hook(fname, back, '    { extern void ps2xHud2DRestore(uint8_t *); ps2xHud2DRestore(rdram); } // LOCAL PATCH (round HUD restore)\n',
+                   'LOCAL PATCH (round HUD restore)')
+print('round HUD: 2D draw hooks added:', n, '(0 = already done; 6 on a fresh runner)')

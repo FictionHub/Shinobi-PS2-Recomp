@@ -108,6 +108,7 @@ namespace launcher
            << ",noscarf:" << b(truthy(get("game", "hide_scarf", "false")))
            << ",nohunger:" << b(truthy(get("game", "no_sword_hunger", "false")))
            << ",norecenter:" << b(truthy(get("game", "no_camera_recenter", "false")))
+           << ",roundhud:" << b(get("video", "hud_shape", "round") != "stretched")
            << ",unlockall:" << b(truthy(get("game", "unlock_all", "false")))
            << ",fairboss:" << b(truthy(get("game", "fair_final_boss", "true")))
            << ",bosshp:'" << get("game", "final_boss_health", "50") << "'"
@@ -206,6 +207,7 @@ namespace launcher
             set("game", "hide_scarf", b(get("noscarf", "0") == "1"));
             set("game", "no_sword_hunger", b(get("nohunger", "0") == "1"));
             set("game", "no_camera_recenter", b(get("norecenter", "0") == "1"));
+            set("video", "hud_shape", get("roundhud", "1") == "1" ? "round" : "stretched");
             set("game", "unlock_all", b(get("unlockall", "0") == "1"));
             set("game", "fair_final_boss", b(get("fairboss", "1") == "1"));
             set("game", "final_boss_health", get("bosshp", "50"));

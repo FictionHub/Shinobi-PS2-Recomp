@@ -781,6 +781,24 @@ void EeScheduler::dumpThreadsForDiagnostics() const
                   << " pc=0x" << context.pc
                   << " ra=0x" << GPR_U32(contextPtr, 31)
                   << std::dec << " invocations=" << thread.invocations.size() << std::endl;
+        // the return addresses on its stack (code-range words), innermost first: who it is waiting for
+        {
+            const uint8_t *rdram = m_runtime.memory().getRDRAM();
+            const uint32_t sp = GPR_U32(contextPtr, 29) & 0x01FFFFFCu;
+            std::cerr << "    sp=0x" << std::hex << sp << " stack:";
+            int shown = 0;
+            for (uint32_t off = 0; off < 0x400u && shown < 14 && sp + off + 4u <= PS2_RAM_SIZE; off += 4u)
+            {
+                uint32_t word = 0;
+                std::memcpy(&word, rdram + sp + off, 4u);
+                if (word >= 0x100000u && word < 0x400000u && (word & 3u) == 0u)
+                {
+                    std::cerr << " 0x" << word;
+                    ++shown;
+                }
+            }
+            std::cerr << std::dec << std::endl;
+        }
     }
 
     // PS2X_PEEK=<addr>[:<words>],...: print guest memory words with each dump.

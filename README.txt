@@ -13,7 +13,7 @@
 
 
 ------------------------------------------------------------------------------
-  WHAT'S NEW IN v0.7
+  WHAT'S NEW IN v0.7 (v0.7.1)
 ------------------------------------------------------------------------------
 
   - Save states, 3 slots: Ctrl+1/2/3 picks a slot, Ctrl+F1 saves, Ctrl+F2 loads
@@ -22,6 +22,8 @@
   - A PC mouse and keyboard layout (see CONTROLS), the mouse in the game's menus,
     and mouse buttons you can bind.
   - Final boss health slider, H = shortcuts panel, Ctrl+R twice = restart.
+  - v0.7.1: the HUD keeps its real shape in 16:9 (round health ring), and
+    Italian / French / German / Spanish no longer give a black screen at start.
   - Fixed: sound effects vanishing after Retry, missing text on the results
     screen, getting stuck in pits with Infinite health, "Game not found" on a
     fresh install, DualSense Bluetooth dropouts, and more. Lighter on the CPU.

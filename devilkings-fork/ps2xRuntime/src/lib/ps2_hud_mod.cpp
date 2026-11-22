@@ -145,6 +145,7 @@ bool ps2xSwordHungerOff()
 // one TATE scene shows which value letterboxes the picture. At most 60 lines.
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 void ps2xScreenTrace(const uint8_t *rdram, uint32_t screen)
 {
@@ -305,4 +306,118 @@ void ps2xPlayerHitTrace(uint8_t *rdram, uint32_t player, uint32_t power)
     const uint8_t kind = rdram[(power + 0xCu) & 0x01FFFFFFu];
     const uint8_t type = rdram[(power + 0xDu) & 0x01FFFFFFu];
     std::fprintf(stderr, "[player-hit] kind=%u type=%u power=%d hp=%d\n", kind, type, rd32(power), rd32(player + 0x32Cu));
+}
+// LOCAL PATCH (round HUD in widescreen; Reddit request). At 16:9 the game's 2D layer is laid out for a 4:3 screen and
+// stretched with the picture, so the HUD comes out a third too wide (the health ring is an oval). While one of the HUD
+// Draw functions runs (runner_patches.py section 18: ps2xHud2DEnter / Leave), the 2D draw functions hand their vertices
+// to ps2xHud2DSqueeze just before copying them into the drawing packet; their X is narrowed by the widescreen factor
+// (0.75 at 16:9) towards the side of the screen the piece sits on, and ps2xHud2DRestore puts the game's own values back
+// right after the copy. [video] hud_shape = round (default) | stretched. PS2X_HUD2D_TRACE=1 logs the pieces instead.
+float ps2xWidescreenFactor(); // ps2_runtime.cpp
+bool ps2xInGameplay();
+namespace
+{
+    struct HudSaved
+    {
+        uint32_t addr;
+        uint32_t bits;
+    };
+    std::vector<int> g_hud2dStack;      // EE thread only
+    std::vector<HudSaved> g_hud2dSaved;
+    constexpr float kHud2DWidth = 640.0f; // the 2D layer's width (PS2 screen pixels)
+}
+
+namespace
+{
+    bool g_hud2dTailLeave = false; // a HUD Draw tail-jumped into a 2D draw: stop at its Restore
+}
+void ps2xHud2DEnter(int piece)
+{
+    if (g_hud2dStack.size() >= 8u) // safety: a HUD Draw that left another way must not leave the HUD on for good
+        g_hud2dStack.clear();
+    g_hud2dStack.push_back(piece);
+}
+void ps2xHud2DLeave()
+{
+    if (!g_hud2dStack.empty())
+        g_hud2dStack.pop_back();
+}
+void ps2xHud2DTailLeave() { g_hud2dTailLeave = true; }
+
+void ps2xHud2DSqueeze(uint8_t *rdram, uint32_t verts, uint32_t count, uint32_t count2, uint32_t stride, uint32_t raSlot)
+{
+    g_hud2dSaved.clear();
+    static const bool s_traceAll = std::getenv("PS2X_HUD2D_TRACE") && std::getenv("PS2X_HUD2D_TRACE")[0] == '2';
+    if ((g_hud2dStack.empty() && !s_traceAll) || !verts || count == 0u || count > 4096u)
+        return;
+    auto rdf = [rdram](uint32_t a) { float v; std::memcpy(&v, rdram + (a & 0x01FFFFFFu), 4u); return v; };
+    float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f;
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const float x = rdf(verts + i * stride), y = rdf(verts + i * stride + 4u);
+        x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
+    }
+    static const bool s_trace = std::getenv("PS2X_HUD2D_TRACE") != nullptr;
+    if (s_trace)
+    {
+        static uint32_t s_lines = 0;
+        const bool corner = std::getenv("PS2X_HUD2D_CORNER") && x0 > 480.0f && y1 < 100.0f;
+        if (s_lines < 4000u && (!std::getenv("PS2X_HUD2D_CORNER") || corner))
+        {
+            ++s_lines;
+            uint32_t ra = 0;
+            std::memcpy(&ra, rdram + (raSlot & 0x01FFFFFFu), 4u);
+            std::fprintf(stderr, "[hud2d] piece=%d depth=%zu n=%u/%u stride=%u x %.1f..%.1f y %.1f..%.1f ra=%08x\n",
+                         g_hud2dStack.empty() ? -1 : g_hud2dStack.back(), g_hud2dStack.size(), count, count2, stride, x0, x1, y0,
+                         y1, ra);
+        }
+        return;
+    }
+    if (g_hud2dStack.empty())
+        return;
+    static uint64_t s_version = ~0ull;
+    static bool s_on = true;
+    if (const uint64_t v = ps2x::settings::version(); v != s_version)
+    {
+        s_version = v;
+        const char *forced = std::getenv("PS2X_HUD_SHAPE"); // test hook: round | stretched
+        s_on = forced ? std::string(forced) != "stretched" : ps2x::settings::get("video", "hud_shape") != "stretched";
+    }
+    const float k = ps2xWidescreenFactor();
+    if (!s_on || !(k > 0.0f && k < 0.999f) || !(x1 >= x0) || x1 - x0 > kHud2DWidth * 0.9f)
+        return;
+    // the side the piece sits on: its own left edge stays put on the left, its right edge on the right, and a piece in
+    // the middle (the boss gauge, centred text) keeps its centre
+    // Pieces drawn where something in the world is (the enemy gauge, the vanish and drain effects: runner_patches.py HUD
+    // list 9, 11, 12, 13) only get their shape back, around their own middle; the fixed HUD keeps to its side.
+    const int piece = g_hud2dStack.back();
+    const bool ownCentre = piece == 9 || piece == 11 || piece == 12 || piece == 13;
+    const float centre = (x0 + x1) * 0.5f;
+    const int anchor = ownCentre ? 3 : centre < kHud2DWidth * 0.4f ? 0 : centre > kHud2DWidth * 0.6f ? 2 : 1;
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const uint32_t a = (verts + i * stride) & 0x01FFFFFFu;
+        uint32_t bits;
+        std::memcpy(&bits, rdram + a, 4u);
+        float x;
+        std::memcpy(&x, &bits, 4u);
+        g_hud2dSaved.push_back({a, bits});
+        const float nx = anchor == 0   ? x * k
+                         : anchor == 2 ? kHud2DWidth - (kHud2DWidth - x) * k
+                         : anchor == 3 ? centre + (x - centre) * k
+                                       : kHud2DWidth * 0.5f + (x - kHud2DWidth * 0.5f) * k;
+        std::memcpy(rdram + a, &nx, 4u);
+    }
+}
+
+void ps2xHud2DRestore(uint8_t *rdram)
+{
+    for (const HudSaved &s : g_hud2dSaved)
+        std::memcpy(rdram + s.addr, &s.bits, 4u);
+    g_hud2dSaved.clear();
+    if (g_hud2dTailLeave)
+    {
+        g_hud2dTailLeave = false;
+        ps2xHud2DLeave();
+    }
 }
