@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath> // std::round / std::fabs below (kept here so this file builds on its own)
 // LOCAL PATCH (mod): hide the HUD. The game's HUD pieces (DrawPlayerInfo, DrawHPInfo, DrawTateInfo, DrawKunaiInfo,
 // DrawSLASHInfo, DrawMakimono, DrawOboroCoin, the boss and enemy gauges) each have a Draw function; the runner's copies
 // of those return straight away while [game] hide_hud is on (F5 in game, the launcher's Display tab). Only drawing is
@@ -325,6 +326,22 @@ namespace
     std::vector<int> g_hud2dStack;      // EE thread only
     std::vector<HudSaved> g_hud2dSaved;
     constexpr float kHud2DWidth = 640.0f; // the 2D layer's width (PS2 screen pixels)
+
+    // The anchor belongs to the HUD piece, not to the draw call that happens to be copying vertices now. Choosing it
+    // from one draw call's bounding box makes it follow the piece's content: the boss bar grows to the right as the
+    // boss loses health, its bbox centre crosses the middle band, and the bar jumps from the left edge to the screen
+    // centre (GitHub #24). The boss gauge sits immediately to the right of the boss portrait, so its left edge must
+    // stay on the left whatever the bar's current width.
+    // 0 = left edge, 1 = screen centre, 2 = right edge, 3 = this draw call's own middle.
+    int ps2xHud2DAnchor(int piece, float x0, float x1)
+    {
+        if (piece == 8 || piece == 10) // DrawBossGauge, DrawBossGauge02
+            return 0;
+        if (piece == 9 || piece == 11 || piece == 12 || piece == 13) // pieces drawn at a world position keep their own middle
+            return 3;
+        const float centre = (x0 + x1) * 0.5f;
+        return centre < kHud2DWidth * 0.4f ? 0 : centre > kHud2DWidth * 0.6f ? 2 : 1;
+    }
 }
 
 namespace
@@ -357,6 +374,8 @@ void ps2xHud2DSqueeze(uint8_t *rdram, uint32_t verts, uint32_t count, uint32_t c
         const float x = rdf(verts + i * stride), y = rdf(verts + i * stride + 4u);
         x0 = std::min(x0, x); x1 = std::max(x1, x); y0 = std::min(y0, y); y1 = std::max(y1, y);
     }
+    const int piece = g_hud2dStack.empty() ? -1 : g_hud2dStack.back();
+    const int anchor = ps2xHud2DAnchor(piece, x0, x1);
     static const bool s_trace = std::getenv("PS2X_HUD2D_TRACE") != nullptr;
     if (s_trace)
     {
@@ -367,9 +386,8 @@ void ps2xHud2DSqueeze(uint8_t *rdram, uint32_t verts, uint32_t count, uint32_t c
             ++s_lines;
             uint32_t ra = 0;
             std::memcpy(&ra, rdram + (raSlot & 0x01FFFFFFu), 4u);
-            std::fprintf(stderr, "[hud2d] piece=%d depth=%zu n=%u/%u stride=%u x %.1f..%.1f y %.1f..%.1f ra=%08x\n",
-                         g_hud2dStack.empty() ? -1 : g_hud2dStack.back(), g_hud2dStack.size(), count, count2, stride, x0, x1, y0,
-                         y1, ra);
+            std::fprintf(stderr, "[hud2d] piece=%d anchor=%d depth=%zu n=%u/%u stride=%u x %.1f..%.1f y %.1f..%.1f ra=%08x\n",
+                         piece, anchor, g_hud2dStack.size(), count, count2, stride, x0, x1, y0, y1, ra);
         }
         return;
     }
@@ -386,14 +404,7 @@ void ps2xHud2DSqueeze(uint8_t *rdram, uint32_t verts, uint32_t count, uint32_t c
     const float k = ps2xWidescreenFactor();
     if (!s_on || !(k > 0.0f && k < 0.999f) || !(x1 >= x0) || x1 - x0 > kHud2DWidth * 0.9f)
         return;
-    // the side the piece sits on: its own left edge stays put on the left, its right edge on the right, and a piece in
-    // the middle (the boss gauge, centred text) keeps its centre
-    // Pieces drawn where something in the world is (the enemy gauge, the vanish and drain effects: runner_patches.py HUD
-    // list 9, 11, 12, 13) only get their shape back, around their own middle; the fixed HUD keeps to its side.
-    const int piece = g_hud2dStack.back();
-    const bool ownCentre = piece == 9 || piece == 11 || piece == 12 || piece == 13;
-    const float centre = (x0 + x1) * 0.5f;
-    const int anchor = ownCentre ? 3 : centre < kHud2DWidth * 0.4f ? 0 : centre > kHud2DWidth * 0.6f ? 2 : 1;
+    const float centre = (x0 + x1) * 0.5f; // only used by the world-anchored pieces (anchor 3)
     for (uint32_t i = 0; i < count; ++i)
     {
         const uint32_t a = (verts + i * stride) & 0x01FFFFFFu;
