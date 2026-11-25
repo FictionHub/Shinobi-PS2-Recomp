@@ -322,10 +322,17 @@ namespace
             std::ifstream in(marker);
             std::string seen;
             std::getline(in, seen);
-            if (seen == stamp)
+            // LOCAL PATCH (v0.7.3, player report "avutil-59 is not found"): the same package, but a file of it gone (an
+            // antivirus quarantine, a store update removing files not in the release zip): unpacked again.
+            const std::string gone = (seen == stamp && usePack) ? launcher::pack::firstMissing(pack, g_runner.parent_path())
+                                                                : std::string();
+            if (seen == stamp && gone.empty())
                 return true;
-            std::fprintf(stderr, "[launcher] %s is newer than the unpacked game program: unpacking it again\n",
-                         usePack ? "Shinobi.pack" : "Shinobi.zip");
+            if (!gone.empty())
+                std::fprintf(stderr, "[launcher] %s is missing from bin: unpacking the game program again\n", gone.c_str());
+            else
+                std::fprintf(stderr, "[launcher] %s is newer than the unpacked game program: unpacking it again\n",
+                             usePack ? "Shinobi.pack" : "Shinobi.zip");
         }
         if (!fs::exists(packed, ec))
             return false;
@@ -714,6 +721,8 @@ namespace
         return std::wstring();
     }
 
+    std::string defaultRenderScale(); // below: the first-run resolution for this PC's graphics card
+
     // window.__launcherInit for the page: its settings, bindings and mods as they are on disk now.
     std::string initScript()
     {
@@ -726,6 +735,11 @@ namespace
         js << ",music:" << (music.empty() ? std::string("null") : jsonString(narrow(music)))
            << ",musicName:" << jsonString(musicName())
            << ",padKind:" << jsonString(launcher::pads::kind())
+           // LOCAL PATCH (v0.7.3): Reset to Defaults uses the same resolution as a fresh install on this graphics card.
+           << ",defRes:" << jsonString([] {
+                  static const std::string scale = defaultRenderScale();
+                  return scale == "2" ? "720p" : scale == "3" ? "1080p" : "1440p";
+              }())
            << ",version:" << jsonString([] {
                   // LOCAL PATCH: the installed version (version.txt, what the updater compares), for the Feature Set page
                   std::ifstream in(g_root / "version.txt");

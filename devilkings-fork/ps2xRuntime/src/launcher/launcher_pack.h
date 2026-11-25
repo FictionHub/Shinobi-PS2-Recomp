@@ -15,4 +15,7 @@ namespace launcher::pack
     // Unpacks every file of `pack` into `folder` (each written under a temporary name, CRC checked, then renamed).
     // Empty on success, else what went wrong.
     std::string unpack(const std::filesystem::path &pack, const std::filesystem::path &folder);
+    // The first file of `pack` missing from `folder` or of another size; empty when all are there (or the header is
+    // unreadable). LOCAL PATCH (v0.7.3: a quarantined / deleted DLL is unpacked again).
+    std::string firstMissing(const std::filesystem::path &pack, const std::filesystem::path &folder);
 }

@@ -18,7 +18,7 @@
 //   text T:  EVaa_bb_cc[EJ].SOT -> ...T.SOT (subtitles); SYSMES_[EJ].SOT -> SYSMES_T.SOT;
 //            SEaa_bb_cc[J].MLT -> SEaa_bb_cc[T].MLT (stage messages; the US "_03" set is the European "_01");
 //            SE_STAT_nn.MLT -> SE_STAT_nn_T.MLT; SECnnnnn.MLX -> STCnnnnn.MLX;
-//            OPTION / SYSMES.BDA -> _FRN/_GER/_ITA/_SPA; SYSTEM.BDA -> SYSTEM_T.BDA
+//            SYSMES.BDA -> _FRN/_GER/_ITA/_SPA (OPTION.BDA: US kept, v0.7.3); SYSTEM.BDA -> SYSTEM_T.BDA
 //   European mode (any European language): the European cutscene scripts (*.EVD), story movies (EVaa_bb_cc.SFD) and
 //            English cutscene dubs, because the European subtitles are timed to them (5 scenes have other lines).
 // Movie audio: HySfdPlayer::setSoundChannel (hook in scripts/runner_patches.py) asks ps2xLangMovieChannel.
@@ -223,7 +223,10 @@ namespace
             return n.substr(0, 10) + "_" + t + ".MLT";
         if (n.size() == 12 && n.compare(0, 3, "SEC") == 0 && digits(n, 3, 5) && n.compare(8, 4, ".MLX") == 0)
             return std::string("S") + t + "C" + n.substr(3);
-        if (n == "OPTION.BDA" || n == "SYSMES.BDA")
+        // LOCAL PATCH (v0.7.3, options screen broken in Italian): the European OPTION*.BDA belong to the European options
+        // menu (subtitle and voice language lists): drawn by the US menu code its language-list sheet covered the values.
+        // The US options menu keeps its own pictures (English labels); everything else follows the text language.
+        if (n == "SYSMES.BDA")
             return n.substr(0, n.size() - 4) + "_" + kBda.at(t) + ".BDA";
         if (n == "SYSTEM.BDA")
             return std::string("SYSTEM_") + t + ".BDA";
@@ -560,6 +563,17 @@ bool ps2xLangOverlayRead(uint64_t sector, uint64_t sectors, uint8_t *dst, size_t
     return true;
 }
 
+// LOCAL PATCH (v0.7.3, "subtitles never show in the movies"): every line of a .SOT text file is tagged with its language
+// letter (E, J, F, G, I, S), and StringsDat::GetString(letter, id) only returns a line with the letter asked for. The US
+// game asks for E or J, so the European files swapped in (tagged F / G / I / S) gave no text at all: no subtitles. With a
+// European text language, a request for E or J is answered from that language (runner hook, runner_patches.py 13d).
+int ps2xLangSotLetter(int letter)
+{
+    if (g.active && european(g.text) && (letter == 'E' || letter == 'J'))
+        return g.text;
+    return letter;
+}
+
 // HySfdPlayer::setSoundChannel (runner hook): which audio track of a story movie to play. US movies: 0 Japanese,
 // 1 English. European movies (European mode): 0 English, 1 French, 2 Italian, 3 German, 4 Spanish.
 int ps2xLangMovieChannel(int requested)
@@ -623,4 +637,14 @@ int ps2xLangMovieTrack(const char *path, int requested)
                      it->second, requested);
     }
     return track;
+}
+
+// LOCAL PATCH (v0.7.3, "subtitles need to be on by default"): GameSystem::IsSubtitle (runner hook, runner_patches.py
+// section 13c) reads the game's option word (+0x270, bit 31 = subtitles). With [language] subtitles on (the default)
+// that bit reads as set, so story movies and cutscenes show subtitles from the start in every language; off, the game's
+// own Subtitles option decides.
+bool ps2xSubtitlesForced()
+{
+    static const bool s_on = ps2x::settings::getBool("language", "subtitles");
+    return s_on;
 }

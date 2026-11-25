@@ -60,7 +60,6 @@
       },
       "new": {
         "video/renderer": "pcsx2",
-        "video/render_scale": "4",
         "video/pcsx2_renderer": "d3d11",
         "video/fps_target": "60",
         "video/aspect": "16:9",

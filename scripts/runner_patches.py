@@ -449,6 +449,20 @@ n = 0
 for fname in ('actSetup__9movieTaskFv_0x242070.cpp', 'entry_002420a8_0x2420a8.cpp'):
     n += fair_hook(fname, 0x2420AC, MOVIE_TRACK, 'LOCAL PATCH (languages movie track)')
 print('languages movie track hooks added:', n, '(0 = already done; 2 on a fresh runner)')
+# ---- 13c. (v0.7.3) Subtitles on by default ([language] subtitles, ps2_lang_overlay.cpp ps2xSubtitlesForced).
+# GameSystem::IsSubtitle: lw v1, 0x270(a0); lui v0, 0x8000; jr ra; and v0, v1, v0. Just before the jr, bit 31 of v1 is set
+# when the setting is on, so the answer is yes.
+n = fair_hook('IsSubtitle__10GameSystemFv_0x238030.cpp', 0x238038,
+              '    { extern bool ps2xSubtitlesForced(); if (ps2xSubtitlesForced()) SET_GPR_U32(ctx, 3, GPR_U32(ctx, 3) | 0x80000000u); } // LOCAL PATCH (subtitles on)' + chr(10),
+              'LOCAL PATCH (subtitles on)')
+print('subtitles-on hook added:', n, '(0 = already done; 1 on a fresh runner)')
+# ---- 13d. (v0.7.3) Subtitles in the chosen European language: StringsDat::GetString(this, letter, id) only returns a
+# line tagged with the letter asked for; the US game asks for E / J, the European files are tagged F / G / I / S.
+# ps2xLangSotLetter answers for the chosen text language (ps2_lang_overlay.cpp).
+n = fair_hook('GetString__10StringsDatFUcUi_0x261a10.cpp', 0x261a10,
+              '    { extern int ps2xLangSotLetter(int letter); SET_GPR_U32(ctx, 5, (uint32_t)ps2xLangSotLetter((int)(GPR_U32(ctx, 5) & 0xFFu))); } // LOCAL PATCH (text letter)' + chr(10),
+              'LOCAL PATCH (text letter)')
+print('text letter hook added:', n, '(0 = already done; 1 on a fresh runner)')
 
 # ---- 14. 1:1 mouse aiming (ps2_runtime.cpp ps2xMouseAimX / Y). The camera reads the right stick with PadGetAnalogX2 /
 # PadGetAnalogY2 and turns value / 128 x 768 angle units a frame; just after each read, the mouse movement since the last

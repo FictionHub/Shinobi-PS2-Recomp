@@ -691,6 +691,10 @@ namespace ps2x::settings
                  "Subtitles, messages and menus. French / German / Italian / Spanish need the European disc.",
                  Kind::Choice, "en", nullptr, {"en", "ja", "fr", "de", "it", "es"},
                  {"English", "Japanese", "French", "German", "Italian", "Spanish"}, 0, 0, nullptr, false});
+            // LOCAL PATCH (v0.7.3): subtitles on by default (GameSystem::IsSubtitle, runner_patches.py section 13c).
+            add({"language", "subtitles", "Subtitles",
+                 "Subtitles in story movies and cutscenes, on from the start. Off: the game's own Subtitles option decides.",
+                 Kind::Bool, "true", nullptr, {}, {}, 0, 0, nullptr, false});
             add({"language", "eu_disc", "European disc image",
                  "Your Shinobi (Europe) disc image (SCES_514.28): its languages are read from it, nothing is copied.",
                  Kind::Path, "", nullptr, {}, {}, 0, 0, nullptr, false});

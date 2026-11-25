@@ -335,9 +335,14 @@ namespace
     // 0 = left edge, 1 = screen centre, 2 = right edge, 3 = this draw call's own middle.
     int ps2xHud2DAnchor(int piece, float x0, float x1)
     {
-        if (piece == 8 || piece == 10) // DrawBossGauge, DrawBossGauge02
-            return 0;
-        if (piece == 9 || piece == 11 || piece == 12 || piece == 13) // pieces drawn at a world position keep their own middle
+        // LOCAL PATCH (v0.7.3, GitHub #24 / #25, checked in a boss fight): the boss bar is four HUD pieces - the frame and
+        // portrait (8 DrawBossGauge, 10 DrawBossGauge02), the health fill (7 DrawGauge, made only by DrawBossGauge02) and
+        // the damage segment shown on each hit (9 DrawDecGauge, made only by DrawGauge::SetBossHP). Squeezed one by one
+        // they drift apart (the fill off the frame, the damage segment hovering on the right), so the boss bar is left as
+        // the game draws it (as before the round HUD): all four parts stay together. -1 = not squeezed.
+        if (piece >= 7 && piece <= 10)
+            return -1;
+        if (piece == 11 || piece == 12 || piece == 13) // pieces drawn at a world position keep their own middle
             return 3;
         const float centre = (x0 + x1) * 0.5f;
         return centre < kHud2DWidth * 0.4f ? 0 : centre > kHud2DWidth * 0.6f ? 2 : 1;
@@ -402,7 +407,7 @@ void ps2xHud2DSqueeze(uint8_t *rdram, uint32_t verts, uint32_t count, uint32_t c
         s_on = forced ? std::string(forced) != "stretched" : ps2x::settings::get("video", "hud_shape") != "stretched";
     }
     const float k = ps2xWidescreenFactor();
-    if (!s_on || !(k > 0.0f && k < 0.999f) || !(x1 >= x0) || x1 - x0 > kHud2DWidth * 0.9f)
+    if (!s_on || anchor < 0 || !(k > 0.0f && k < 0.999f) || !(x1 >= x0) || x1 - x0 > kHud2DWidth * 0.9f)
         return;
     const float centre = (x0 + x1) * 0.5f; // only used by the world-anchored pieces (anchor 3)
     for (uint32_t i = 0; i < count; ++i)

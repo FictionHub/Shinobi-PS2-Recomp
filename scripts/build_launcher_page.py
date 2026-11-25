@@ -1045,7 +1045,7 @@ L("""    this.defaults = { res: '1080p', renderer: 'Vulkan', ws: true, vsync: fa
     this.defaults = { res: '1440p', renderer: 'D3D11', fps: '60', ws: true, wsShape: '16:9', vsync: true, tex: 1, fx: 1, aa: 'FXAA', msaa: 4, blend: 'basic' };
     this.defBinds = { up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT,E', cross: 'X,SPACE', circle: 'C,ESCAPE', square: 'Z,KP_0', triangle: 'Q,V,KP_1', l1: 'F', r1: 'R', l2: 'LEFT_SHIFT', r2: 'RIGHT_SHIFT', start: 'ENTER', select: 'TAB' };
     this.defMods = { studio: false, nscale: true, rr5fix: false, dropst: false, record: false, intro: true, fastvu: false, dbg: false, full: true, diag: false, legacy: false, k8: false };
-    const init = window.__launcherInit || null;
+    const init = window.__launcherInit || null; if (init && init.defRes) this.defaults.res = init.defRes; // LOCAL PATCH (v0.7.3): Reset = this PC's first-run resolution
     this.manualOnly = !!(init && init.manualOnly);
     const start = Object.assign({}, this.defaults, init ? init.settings : {});
     this.state = Object.assign({}, start, {

@@ -69,6 +69,46 @@ namespace launcher::pack
         };
     }
 
+    // LOCAL PATCH (v0.7.3, player report "It won't run because avutil-59 is not found"): the first file of the package
+    // that is missing from `folder` or has another size (empty: all there). Only the header is read. A DLL taken away
+    // after the unpack (an antivirus quarantine, a store's update removing files that are not in the release zip) left
+    // Shinobi.exe unable to start, and the launcher never unpacked again because the package itself had not changed.
+    std::string firstMissing(const fs::path &pack, const fs::path &folder)
+    {
+        std::ifstream in(pack, std::ios::binary);
+        if (!in)
+            return {};
+        std::vector<uint8_t> head(64 * 1024);
+        in.read(reinterpret_cast<char *>(head.data()), static_cast<std::streamsize>(head.size()));
+        head.resize(static_cast<size_t>(in.gcount()));
+        Reader r{head};
+        if (head.size() < 12 || std::memcmp(head.data(), "SHPK", 4) != 0)
+            return {};
+        r.at = 4;
+        if (r.get<uint32_t>() != 1)
+            return {};
+        const uint32_t count = r.get<uint32_t>();
+        if (!r.ok || count == 0 || count > 64)
+            return {};
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            const uint16_t length = r.get<uint16_t>();
+            if (!r.ok || r.at + length > head.size())
+                return {};
+            const std::string name(reinterpret_cast<const char *>(head.data() + r.at), length);
+            r.at += length;
+            const uint64_t size = r.get<uint64_t>();
+            (void)r.get<uint32_t>();
+            if (!r.ok || name.empty() || name.find_first_of("\\:") != std::string::npos || name.find("..") != std::string::npos)
+                return {};
+            std::error_code ec;
+            const fs::path p = folder / fs::path(std::u8string(name.begin(), name.end()));
+            if (!fs::exists(p, ec) || fs::file_size(p, ec) != size)
+                return name;
+        }
+        return {};
+    }
+
     std::string unpack(const fs::path &pack, const fs::path &folder)
     {
         std::vector<uint8_t> file;

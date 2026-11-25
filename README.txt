@@ -13,7 +13,7 @@
 
 
 ------------------------------------------------------------------------------
-  WHAT'S NEW IN v0.7 (v0.7.2)
+  WHAT'S NEW IN v0.7 (v0.7.3)
 ------------------------------------------------------------------------------
 
   - Save states, 3 slots: Ctrl+1/2/3 picks a slot, Ctrl+F1 saves, Ctrl+F2 loads
@@ -27,6 +27,9 @@
   - v0.7.2: the story movies play in your chosen language (Italian, French,
     German, Spanish), the launcher always fits the screen, and a fresh install
     picks a resolution that suits your graphics card.
+  - v0.7.3: boss health bar fixed in widescreen, subtitles on by default, European subtitles in the story movies,
+    options screen fixed, and "avutil-59.dll was not found" fixed (the launcher
+    puts back any game file that was removed, for example by an antivirus).
   - Fixed: sound effects vanishing after Retry, missing text on the results
     screen, getting stuck in pits with Infinite health, "Game not found" on a
     fresh install, DualSense Bluetooth dropouts, and more. Lighter on the CPU.
