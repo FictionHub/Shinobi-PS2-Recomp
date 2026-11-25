@@ -2,6 +2,8 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
+**v0.7.2 (hotfix):** Italian / French / German / Spanish voices now play in the story movies too, the launcher always fits the screen (laptops with Windows scaling above 100%), and a fresh install picks a resolution that suits the graphics card (2x on older cards). **[Download v0.7.2](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)**
+
 **v0.7.1 (hotfix):** the HUD keeps its real shape in 16:9 (round health ring; Mod Menu > Look to switch back), and Italian / French / German / Spanish no longer give a black screen at start. **[Download v0.7.1](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)**
 
 **v0.7.0:** Save states with 3 slots, a Field of View slider, no camera recentering, a proper PC mouse and keyboard layout, a final boss health slider, restart with Ctrl+R, an on-screen shortcuts panel (H), the Retry sound bug fixed, 13 fixes in all and lighter on the CPU. **[Download v0.7.0](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)** · **[HD Texture Pack v2](https://github.com/TheRealAfsan/Shinobi-PS2-HD-Texture-Pack-1/releases/latest)** (optional: 372 textures, now with Stage 2) · [What's new](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/tag/v0.7.0)

@@ -1,7 +1,7 @@
 // LOCAL PATCH: Languages. The US game already has a language system (GameSystem::SetLanguage / SetVoice /
 // IsSubtitle, English + Japanese, files picked by letter: E1000050.ADX / J1000050.ADX, EV01_00_00E.SOT /
 // EV01_00_00J.SOT, ...). The European release is the same game with four more letters (F, G, I, S) on the same file
-// names, plus movies that carry five audio tracks (0 English, 1 French, 2 German, 3 Italian, 4 Spanish).
+// names, plus movies that carry five audio tracks (0 English, 1 French, 2 Italian, 3 German, 4 Spanish).
 //
 // The game reads all of its files from ROFSSMP.CVM (a CRI CVM: a 0x1800-byte header, then an ISO 9660 image) through
 // the CD layer (Kernel/Stubs/Helpers/Support.h). When a language other than English is chosen, that file is replaced
@@ -79,8 +79,32 @@ namespace
         std::vector<Appended> appended;                   // by isoLbn
         std::ifstream us, eu;
         std::mutex lock;
+        // LOCAL PATCH (v0.7.2, player report "Italian: the movies still play in English"): the European story movies
+        // swapped in, by name, with the audio tracks they carry (5: English, French, Italian, German, Spanish; the
+        // ending EV11_00_00 has 1).
+        std::unordered_map<std::string, int> euMovieTracks;
+        int movieTracks = 0; // the movie being set up now: its tracks when it is a European one, else 0
     };
     State g;
+
+    // The audio tracks of an MPEG movie (Sofdec .SFD) that starts at `offset` of `f`: audio streams 0xC0, 0xC1, ...
+    // seen in its first 256 KB (each track has a packet there every few frames).
+    int movieAudioTracks(std::ifstream &f, uint64_t offset, uint64_t size)
+    {
+        std::vector<uint8_t> b(static_cast<size_t>(std::min<uint64_t>(size, 256 * 1024)));
+        f.clear();
+        f.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+        f.read(reinterpret_cast<char *>(b.data()), static_cast<std::streamsize>(b.size()));
+        b.resize(static_cast<size_t>(std::max<std::streamsize>(0, f.gcount())));
+        int count[5] = {};
+        for (size_t i = 0; i + 4 <= b.size(); ++i)
+            if (b[i] == 0 && b[i + 1] == 0 && b[i + 2] == 1 && b[i + 3] >= 0xC0 && b[i + 3] <= 0xC4)
+                ++count[b[i + 3] - 0xC0];
+        int tracks = 0;
+        while (tracks < 5 && count[tracks] >= 4)
+            ++tracks;
+        return std::max(tracks, 1);
+    }
 
     bool readAt(std::ifstream &f, uint64_t offset, void *dst, size_t bytes)
     {
@@ -378,6 +402,8 @@ namespace
                 continue;
             wr32both(&dir[ref.record + 10], static_cast<uint32_t>(src->second.size));
             ++swapped;
+            if (fromEu && name.size() > 4 && name.compare(name.size() - 4, 4, ".SFD") == 0)
+                g.euMovieTracks[name] = movieAudioTracks(g.eu, src->second.offset, src->second.size);
         }
         // The European files that did not fit in place go after the US image, smallest first: should a language ever
         // pass the 2 GB the game's file system reaches, only the biggest (movies) are past it, never text or voices.
@@ -535,10 +561,11 @@ bool ps2xLangOverlayRead(uint64_t sector, uint64_t sectors, uint8_t *dst, size_t
 }
 
 // HySfdPlayer::setSoundChannel (runner hook): which audio track of a story movie to play. US movies: 0 Japanese,
-// 1 English. European movies (European mode): 0 English, 1 French, 2 German, 3 Italian, 4 Spanish.
+// 1 English. European movies (European mode): 0 English, 1 French, 2 Italian, 3 German, 4 Spanish.
 int ps2xLangMovieChannel(int requested)
 {
-    if (!g.active || (requested != 0 && requested != 1))
+    // (a European movie's track was chosen in movieTask::actSetup: ps2xLangMovieTrack)
+    if (!g.active || g.movieTracks || (requested != 0 && requested != 1))
         return requested;
     // (PS2X_LANG_US_MOVIES keeps the US movies in European mode: then their two tracks, as above)
     if (!g.euMode || std::getenv("PS2X_LANG_US_MOVIES"))
@@ -546,9 +573,54 @@ int ps2xLangMovieChannel(int requested)
     switch (g.voice)
     {
     case 'F': return 1;
-    case 'G': return 2;
-    case 'I': return 3;
+    case 'I': return 2;
+    case 'G': return 3;
     case 'S': return 4;
     default: return 0; // English (the European movies have no Japanese track)
     }
+}
+
+// LOCAL PATCH (v0.7.2, player report "Italian: the movies still play in English"). movieTask::actSetup (runner hook,
+// scripts/runner_patches.py section 13b) asks here, with the movie's file name, which audio track to play, just before
+// it calls HySfdPlayer::setSoundChannel only when that track is not 0. Two faults: the tracks were taken as En, Fr, De,
+// It, Es, but the European game's order is En, Fr, It, De, Es (Italian played German), and the game asks for track 1
+// only when its own voice setting is English and the scene says so (a scene asking for 0 played track 0, English). A
+// European story movie now always gets the chosen language's track (0 English: the call is skipped and track 0 plays);
+// every other movie keeps the game's choice (ps2xLangMovieChannel). Checked against a recording of the game's audio
+// (PS2X_AUDIO_DUMP): it matches the movie's Italian track sample for sample.
+int ps2xLangMovieTrack(const char *path, int requested)
+{
+    g.movieTracks = 0;
+    if (!g.active || !g.euMode || !path)
+        return requested;
+    std::string name(path);
+    const size_t slash = name.find_last_of("\/:");
+    if (slash != std::string::npos)
+        name.erase(0, slash + 1);
+    const size_t semi = name.find(';');
+    if (semi != std::string::npos)
+        name.erase(semi);
+    const auto it = g.euMovieTracks.find(upper(name));
+    if (it == g.euMovieTracks.end())
+        return requested;
+    g.movieTracks = it->second;
+    int track = 0;
+    switch (g.voice)
+    {
+    case 'F': track = 1; break;
+    case 'I': track = 2; break; // (the European game's own order: its language table reads ENG, FRN, ITL, GER, SPA)
+    case 'G': track = 3; break;
+    case 'S': track = 4; break;
+    default: break;
+    }
+    if (track >= it->second)
+        track = 0; // (the ending has its one track only)
+    static int s_logged = 0;
+    if (s_logged < 40)
+    {
+        ++s_logged;
+        std::fprintf(stderr, "[lang] movie %s: audio track %d of %d (the game asked for %d)\n", name.c_str(), track,
+                     it->second, requested);
+    }
+    return track;
 }

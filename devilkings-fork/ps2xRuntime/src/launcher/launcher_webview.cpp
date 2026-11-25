@@ -22,6 +22,9 @@
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <wrl.h>
+#include <dxgi.h>
+#include <regex>
+#pragma comment(lib, "dxgi.lib")
 
 #include "WebView2.h"
 #include "WebView2EnvironmentOptions.h"
@@ -1277,12 +1280,56 @@ namespace
                 .Get());
     }
 
+    // LOCAL PATCH (first-run resolution by graphics card, player reports 2026-11-24: GTX 1650 Ti laptop and RX 570 found
+    // 4x too heavy): the card with the most video memory is the one the game will use (a laptop's own GPU, not the
+    // built-in one). Older / entry cards start at 2x (1280x896), mid-range at 3x, the rest at 4x. Only a fresh install;
+    // the player's own choice is never changed.
+    std::string defaultRenderScale()
+    {
+        IDXGIFactory1 *factory = nullptr;
+        if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void **>(&factory))) || !factory)
+            return "4";
+        std::wstring name;
+        SIZE_T bestMemory = 0;
+        IDXGIAdapter1 *adapter = nullptr;
+        for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+        {
+            DXGI_ADAPTER_DESC1 desc{};
+            if (SUCCEEDED(adapter->GetDesc1(&desc)) && !(desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) &&
+                desc.DedicatedVideoMemory >= bestMemory)
+            {
+                bestMemory = desc.DedicatedVideoMemory;
+                name = desc.Description;
+            }
+            adapter->Release();
+        }
+        factory->Release();
+        std::string n;
+        for (wchar_t c : name)
+            n.push_back(c < 128 ? static_cast<char>(std::toupper(static_cast<int>(c))) : '?');
+        const double gb = static_cast<double>(bestMemory) / (1024.0 * 1024.0 * 1024.0);
+        static const std::regex weak(
+            "INTEL|UHD|IRIS|\\bMX ?\\d|GT \\d|GTX ?(7|9)\\d\\d|GTX ?10[35]0|GTX ?1060|GTX ?1650|RX ?[45]\\d\\d\\b|\\bR[579] |VEGA|"
+            "RADEON\\(TM\\) GRAPHICS|RADEON GRAPHICS|RX ?6[45]\\d\\dM|RX ?640\\b");
+        static const std::regex mid("GTX ?10[78]0|GTX ?16[67]0|RTX ?20[56]0|RTX ?[34]050|RX ?5[56]00|RX ?6[56]00|RX ?7600|ARC\\(TM\\) A[37]|ARC A[37]");
+        std::string scale = "4";
+        if (n.empty() || gb < 3.0 || std::regex_search(n, weak))
+            scale = "2";
+        else if (gb < 6.0 || std::regex_search(n, mid))
+            scale = "3";
+        std::fprintf(stderr, "[launcher] graphics card %s (%.1f GB): first-run resolution %sx\n", n.c_str(), gb,
+                     scale.c_str());
+        return scale;
+    }
+
     // No settings.ini yet (never saved from the launcher): the launcher's defaults, so the game does not start on its own
     // built-in ones. Only keys the file does not have yet are written.
     void writeDefaultSettings()
     {
         if (fs::exists(g_gameDir / "settings.ini") && !g_game.get("video", "window", "").empty())
             return;
+        if (g_game.get("video", "render_scale", "").empty())
+            g_game.set("video", "render_scale", defaultRenderScale());
         const char *defaults[][3] = {{"video", "renderer", "pcsx2"},       {"video", "render_scale", "4"},
                                      {"video", "pcsx2_renderer", "d3d11"}, {"video", "fps_target", "60"},
                                      {"video", "aspect", "16:9"},          {"video", "vsync", "true"},
@@ -1503,6 +1550,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
     if (const wchar_t *page = _wgetenv(L"SHINOBI_LAUNCHER_PAGE"))
         g_page = fs::path(page);
     g_game.load((g_gameDir / "settings.ini").string());
+    // LOCAL PATCH (first-run resolution by graphics card): shown on the page from the start (written with the
+    // other defaults at the first Play or Save).
+    if (g_game.get("video", "render_scale", "").empty())
+        g_game.set("video", "render_scale", defaultRenderScale());
     if (const char *shot = std::getenv("SHINOBI_LAUNCHER_SHOT"))
         g_shotPath = widen(shot);
 
@@ -1693,6 +1744,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show)
         {
             w = bigW;
             h = bigH;
+        }
+        // LOCAL PATCH (small / high-DPI screens, player report 2026-11-24 "the UI scales oddly, I can't see the whole
+        // menu"): the page at the monitor's scale can be bigger than the screen (1080p laptop at 150-175%); the
+        // window then went past the bottom and the Save / Low-end PC buttons were cut off. Never bigger than the work
+        // area: the page shrinks to fit (fitPage).
+        if (h > workH)
+        {
+            h = workH;
+            w = MulDiv(h, kPageWidth, kPageHeight);
+        }
+        if (w > workW)
+        {
+            w = workW;
+            h = MulDiv(w, kPageHeight, kPageWidth);
         }
     }
     g_hwnd = CreateWindowExW(WS_EX_APPWINDOW, wc.lpszClassName, L"Shinobi (PS2 Recom) Launcher - by TheRealAfsan",

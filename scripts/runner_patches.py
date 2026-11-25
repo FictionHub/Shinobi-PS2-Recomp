@@ -429,12 +429,26 @@ print('jukebox hooks added:', n, '(0 = already done; 3 on a fresh runner)')
 
 # ---- 13. Languages (ps2_lang_overlay.cpp): a story movie's audio track. HySfdPlayer::setSoundChannel(this, ch) passes
 # ch (0 Japanese / 1 English on the US movies) to mwPlySetAudioCh; with another language chosen, the European movies
-# are played and their track for that language is asked for instead (0 English, 1 French, 2 German, 3 Italian, 4 Spanish).
+# are played and their track for that language is asked for instead (0 English, 1 French, 2 Italian, 3 German, 4 Spanish).
 n = fair_hook('setSoundChannel__11HySfdPlayerFUc_0x243190.cpp', 0x243190,
               '    { extern int ps2xLangMovieChannel(int requested); // ps2_lang_overlay.cpp (LOCAL PATCH)' + chr(10) +
               '      SET_GPR_U32(ctx, 5, (uint32_t)ps2xLangMovieChannel((int)(GPR_U32(ctx, 5) & 0xFFu))); } // LOCAL PATCH (languages movie audio)' + chr(10),
               'LOCAL PATCH (languages movie audio)')
 print('languages movie audio hook added:', n, '(0 = already done)')
+# ---- 13b. (v0.7.2, player report "Italian: the movies still play in English") The European movies' tracks are in the
+# European game's own order, 0 English, 1 French, 2 Italian, 3 German, 4 Spanish (its language table reads ENG, FRN, ITL,
+# GER, SPA; track = language - 1): Italian had played the German track. Also, movieTask::actSetup calls setSoundChannel only
+# when the movie's track byte (+0xC4) is not 0, and some scenes pass 0 (the movie then played track 0, English). Just
+# before that test, ps2xLangMovieTrack picks the track from the movie's name (+0x74). 0x2420a8 is also an entry of its own
+# (entry_002420a8), so both copies get it. Checked against a recording of the game's audio: it matches the Italian track exactly.
+MOVIE_TRACK = ('    { extern int ps2xLangMovieTrack(const char *path, int requested); // ps2_lang_overlay.cpp (LOCAL PATCH)' + chr(10) +
+               '      const uint32_t movieName = READ32(ADD32(GPR_U32(ctx, 16), 0x74));' + chr(10) +
+               '      SET_GPR_U32(ctx, 5, (uint32_t)ps2xLangMovieTrack(movieName ? reinterpret_cast<const char *>(rdram + (movieName & PS2_RAM_MASK)) : nullptr,' + chr(10) +
+               '                                                         (int)(GPR_U32(ctx, 5) & 0xFFu))); } // LOCAL PATCH (languages movie track)' + chr(10))
+n = 0
+for fname in ('actSetup__9movieTaskFv_0x242070.cpp', 'entry_002420a8_0x2420a8.cpp'):
+    n += fair_hook(fname, 0x2420AC, MOVIE_TRACK, 'LOCAL PATCH (languages movie track)')
+print('languages movie track hooks added:', n, '(0 = already done; 2 on a fresh runner)')
 
 # ---- 14. 1:1 mouse aiming (ps2_runtime.cpp ps2xMouseAimX / Y). The camera reads the right stick with PadGetAnalogX2 /
 # PadGetAnalogY2 and turns value / 128 x 768 angle units a frame; just after each read, the mouse movement since the last

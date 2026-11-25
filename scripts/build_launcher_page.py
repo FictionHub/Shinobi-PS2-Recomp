@@ -2584,6 +2584,16 @@ for _uid, _res in manifest.items():
         _res['data'] = base64.b64encode(_buf.getvalue()).decode()
 print('pictures as WebP: %d KB smaller' % (_webp_saved // 1024))
 set_block('manifest', json.dumps(manifest, separators=(',', ':')))
+# LOCAL PATCH (fit the page, player report 2026-11-24 "the UI scales oddly, I can't see the whole menu"): when the
+# view is smaller than the 1000 x 640 design (a high-DPI laptop, a host zoom that came out wrong), the page shrinks itself
+# to fit, so the bottom buttons (Save settings, Low-end PC) are never cut off. At the normal size the zoom stays 1.
+_FIT_JS = ("(function(){var fit=function(){var b=document.body;if(!b)return;"
+           "var f=Math.min(1,window.innerWidth/1000,window.innerHeight/640);"
+           "b.style.zoom=(f<0.999?String(f):'');};"
+           "window.addEventListener('resize',fit);document.addEventListener('DOMContentLoaded',fit);"
+           "setTimeout(fit,0);setTimeout(fit,500);})();" + chr(10))
+_ls = template.index('class Component extends DCLogic')
+template = template[:_ls] + _FIT_JS + template[_ls:]
 set_block('template', json.dumps(template).replace('</', r'<\u002F'))  # keep </script> inside the block escaped
 os.makedirs(os.path.dirname(out_path), exist_ok=True)
 open(out_path, 'w', encoding='utf-8').write(page)

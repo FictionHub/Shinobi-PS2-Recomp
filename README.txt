@@ -13,7 +13,7 @@
 
 
 ------------------------------------------------------------------------------
-  WHAT'S NEW IN v0.7 (v0.7.1)
+  WHAT'S NEW IN v0.7 (v0.7.2)
 ------------------------------------------------------------------------------
 
   - Save states, 3 slots: Ctrl+1/2/3 picks a slot, Ctrl+F1 saves, Ctrl+F2 loads
@@ -24,6 +24,9 @@
   - Final boss health slider, H = shortcuts panel, Ctrl+R twice = restart.
   - v0.7.1: the HUD keeps its real shape in 16:9 (round health ring), and
     Italian / French / German / Spanish no longer give a black screen at start.
+  - v0.7.2: the story movies play in your chosen language (Italian, French,
+    German, Spanish), the launcher always fits the screen, and a fresh install
+    picks a resolution that suits your graphics card.
   - Fixed: sound effects vanishing after Retry, missing text on the results
     screen, getting stuck in pits with Infinite health, "Game not found" on a
     fresh install, DualSense Bluetooth dropouts, and more. Lighter on the CPU.
