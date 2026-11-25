@@ -12,6 +12,7 @@ build/
 *.iso
 *.bin
 *.img
+*.chd
 *.elf
 *.cvm
 *.irx

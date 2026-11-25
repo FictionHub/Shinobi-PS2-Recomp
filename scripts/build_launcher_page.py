@@ -1992,7 +1992,7 @@ L("""openMods: set({ modal: 'mods' }),""",
       gfileCls: (s.iso && !s.isoFound) || (!s.iso && !s.installed) ? 'warn' : '',
       showGame: s.modal === 'game',
       gameIntro: 'This launcher does not contain the game. Choose your own copy of Shinobi (PlayStation 2, USA) as a disc image '
-        + '(.iso, or .bin / .img). The launcher checks that it is the right game and copies its files into the game folder.',
+        + '(.iso, .bin / .img, or .chd). The launcher checks that it is the right game and copies its files into the game folder.',
       isoPath: s.iso || 'No file chosen',
       isoStatus: s.isoMsg || (s.installed ? 'The game files are set up.' : s.iso ? 'Press Set up to copy the game files.' : 'No game file chosen yet.'),
       installBusy: s.installPct >= 0,

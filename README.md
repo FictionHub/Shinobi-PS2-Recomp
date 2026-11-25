@@ -42,7 +42,7 @@ Coming from v0.4? Download the newest release once and unzip it over your old fo
 Everything is in this one repository: the launcher, the game program and the source code.
 
 > ### You must own the game
-> Buy your own copy of **Shinobi (PlayStation 2, USA)** and make a disc image (`.iso`) from your own disc with a DVD drive and a disc-imaging tool. **This repository contains no game, no disc image and no game data**, and it never will. We do not provide, link to or help anyone find a copy of the game. No disc, no game.
+> Buy your own copy of **Shinobi (PlayStation 2, USA)** and make a disc image (`.iso`, `.bin` / `.img` with raw sectors, or a `.chd` made from your own disc) with a DVD drive and a disc-imaging tool. **This repository contains no game, no disc image and no game data**, and it never will. We do not provide, link to or help anyone find a copy of the game. No disc, no game.
 
 ---
 
@@ -441,7 +441,7 @@ Any issues? Tell me in the Issues tab or on Reddit, I read everything and I'll f
 - A graphics card with Direct3D 11 (default) or Vulkan
 - Microsoft Edge WebView2 Runtime (part of Windows 11; without it the launcher still sets up and starts the game, just without its window)
 - The Microsoft Visual C++ Redistributable (x64), which most PCs already have
-- Your own disc image of Shinobi (USA), `.iso` (or `.bin` / `.img` with raw sectors)
+- Your own disc image of Shinobi (USA), `.iso` (or `.bin` / `.img` with raw sectors, or a `.chd` made from your own disc)
 - About 1.5 GB free space, plus saves
 - For HD haptics: a DualSense or DualSense Edge (USB or Bluetooth)
 
@@ -455,6 +455,8 @@ Developed on a Ryzen 7 9800X3D and a GeForce RTX 5080. The CPU is the main limit
 4. **Play Game (Recom).**
 
 The launcher remembers where your game file is and shows it under the Game File button.
+
+A compressed `.chd` made from your own disc works for this setup too (both uncompressed and the usual codecs). Pick it with the bundled **Shinobi Launcher.exe**; RecompLauncher's own picker still asks for a plain disc image. The optional European disc for the other languages still has to be an `.iso` / `.bin` / `.img`: the game reads that one while it runs, outside the launcher.
 
 ## Controls
 

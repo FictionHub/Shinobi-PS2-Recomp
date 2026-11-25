@@ -400,7 +400,7 @@ namespace
         ComPtr<IFileOpenDialog> dialog;
         if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dialog))))
             return {};
-        const COMDLG_FILTERSPEC filters[] = {{L"PS2 disc images (*.iso, *.bin, *.img)", L"*.iso;*.bin;*.img"}, {L"All files", L"*.*"}};
+        const COMDLG_FILTERSPEC filters[] = {{L"PS2 disc images (*.iso, *.bin, *.img, *.chd)", L"*.iso;*.bin;*.img;*.chd"}, {L"All files", L"*.*"}};
         dialog->SetFileTypes(2, filters);
         dialog->SetTitle(L"Select your Shinobi (USA) disc image");
         DWORD options = 0;
@@ -1046,7 +1046,17 @@ namespace
                 FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &picked)) || !picked)
                 return;
             const fs::path path(picked);
+            const std::wstring pickedPath = path.wstring();
             CoTaskMemFree(picked);
+            // The in-game language overlay reads this second disc as raw ISO bytes, not through the launcher's CHD reader.
+            std::string ext = narrow(path.extension().wstring());
+            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (ext == ".chd")
+            {
+                post(L"eudisc:bad|" + pickedPath +
+                     L"|CHD images cannot be used for the European language disc; choose a .iso, .bin or .img instead.");
+                return;
+            }
             const launcher::iso::Check check = launcher::iso::check(path, "SCES_514.28");
             std::string text;
             if (check.ok)
@@ -1394,8 +1404,9 @@ namespace
                 if (image.empty() || !fs::exists(image, ec))
                 {
                     if (MessageBoxW(nullptr,
-                                    L"First start: choose your disc image (.iso) of Shinobi for PlayStation 2, USA release "
-                                    L"(SLUS-20459).\n\nThe game's files (about 1.2 GB) are copied out of it once.",
+                                    L"First start: choose your disc image (.iso, .bin, .img or .chd) of Shinobi for "
+                                    L"PlayStation 2, USA release (SLUS-20459).\n\nThe game's files (about 1.2 GB) are "
+                                    L"copied out of it once.",
                                     L"Shinobi", MB_OKCANCEL | MB_ICONINFORMATION) != IDOK)
                         return 1;
                     image = browseForImage();
