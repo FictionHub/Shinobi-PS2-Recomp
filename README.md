@@ -439,7 +439,7 @@ Any issues? Tell me in the Issues tab or on Reddit, I read everything and I'll f
 ## What you need
 
 - Windows 10 or 11, 64-bit
-- Any 64-bit processor with SSE4.1 (Intel Core 2 from 2008, AMD from 2011, or newer: the same minimum as PCSX2). With AVX2 (Intel Core 4th generation, 2013+, or any AMD Ryzen) the launcher starts the faster build; without it, the launcher fetches the fallback build once (about 19 MB, from the same release: `Shinobi-SSE4-v<version>.pack`) and starts it by itself. No choice to make. Offline, download that file from the release page and put it in the `bin` folder as `Shinobi-SSE4.pack`.
+- Any 64-bit processor with SSE4.1 (Intel Core 2 from 2008, AMD from 2011, or newer: the same minimum as PCSX2). With AVX2 (Intel Core 4th generation, 2013+, or any AMD Ryzen) the launcher starts the faster build; without it, the launcher fetches the fallback build once (about 19 MB, from the same release: `Shinobi-SSE4-v<version>.pack`) and starts it by itself. No choice to make. Offline, download that file from the release page and put it in the `bin` folder as `Shinobi-SSE4.pack`. On an older CPU, press **Low-end PC** in the launcher: as well as the lighter graphics settings it now enables **Fast VU maths** (PCSX2's default), which avoids the slower exact vector-unit path in gameplay.
 - A graphics card with Direct3D 11 (default) or Vulkan
 - Microsoft Edge WebView2 Runtime (part of Windows 11; without it the launcher still sets up and starts the game, just without its window)
 - The Microsoft Visual C++ Redistributable (x64), which most PCs already have

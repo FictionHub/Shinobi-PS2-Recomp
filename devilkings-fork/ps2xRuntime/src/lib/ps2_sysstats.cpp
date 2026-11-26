@@ -199,9 +199,17 @@ namespace
             return -1.0;
         if (!s_query)
         {
-            if (PdhOpenQueryW(nullptr, 0, &s_query) != ERROR_SUCCESS ||
-                PdhAddEnglishCounterW(s_query, L"\\GPU Engine(*)\\Utilization Percentage", 0, &s_counter) != ERROR_SUCCESS)
+            const PDH_STATUS opened = PdhOpenQueryW(nullptr, 0, &s_query);
+            const PDH_STATUS added = opened == ERROR_SUCCESS
+                                         ? PdhAddEnglishCounterW(s_query, L"\\GPU Engine(*)\\Utilization Percentage", 0, &s_counter)
+                                         : ERROR_SUCCESS;
+            if (opened != ERROR_SUCCESS || added != ERROR_SUCCESS)
             {
+                // The overlay/title then shows GPU -- for the whole session. Log why once: on older Windows or
+                // drivers without the GPU Engine counter this is expected, but it should be explainable from the log.
+                std::fprintf(stderr, "[sysstats] GPU Engine counters unavailable (PdhOpenQuery=%lu, "
+                                     "PdhAddEnglishCounter=%lu); GPU%% will show as --\n",
+                             static_cast<unsigned long>(opened), static_cast<unsigned long>(added));
                 s_failed = true;
                 return -1.0;
             }

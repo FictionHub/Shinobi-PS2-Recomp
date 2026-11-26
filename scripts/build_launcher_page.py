@@ -1933,10 +1933,14 @@ L("""      hasToast: !!s.toast,""",
         this.toastMsg('Defaults restored - save to keep them');
       },
       // Lighter settings for slower PCs: the game's own resolution, no extra texture filtering, sharpening or
-      // anti-aliasing, PCSX2's lightest blending accuracy; frame rate, widescreen and V-Sync as the defaults.
+      // anti-aliasing, PCSX2's lightest blending accuracy, and the faster VU maths (PCSX2's default) which matters
+      // most on the older CPUs this preset is for. Frame rate, widescreen and V-Sync stay at the defaults.
       lowEndBtn: () => {
-        this.setState(Object.assign({ resOpen: false }, this.defaults, { res: 'Native', tex: 0, fx: 0, aa: 'Off', blend: 'minimum' }));
-        this.toastMsg('Low-end PC settings - save to keep them');
+        this.setState(Object.assign({ resOpen: false }, this.defaults, {
+          res: 'Native', tex: 0, fx: 0, aa: 'Off', blend: 'minimum',
+          mods: Object.assign({}, this.state.mods, { fastvu: true })
+        }));
+        this.toastMsg('Low-end PC settings (including Fast VU maths) - save to keep them');
       },
 
       hasToast: !!s.toast,""")

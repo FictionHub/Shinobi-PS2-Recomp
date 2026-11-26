@@ -503,6 +503,12 @@ if(MSVC AND PS2X_VU1_CLANG AND RUNNER_VU1_SRC_FILES)
     find_program(PS2X_CLANG_CL clang-cl HINTS "$ENV{ProgramFiles}/LLVM/bin" "C:/Program Files/LLVM/bin")
     if(PS2X_CLANG_CL)
         set(_ps2x_vu1_clang "${PS2X_CLANG_CL}")
+    else()
+        # The replay benchmark measured clang-cl's VU1 objects at 6.6 ns/cycle vs MSVC's 8.9 (about 26% faster
+        # on the VIF1+VU1 thread). A fallback build made without clang-cl can therefore be much slower in gameplay
+        # even though it is otherwise the same game; make that configuration visible instead of shipping it silently.
+        message(WARNING "clang-cl was not found: translated VU1 programs will be built with MSVC and can be about "
+                        "26% slower in gameplay. Install LLVM for Windows, or pass -DPS2X_VU1_CLANG=OFF to accept this.")
     endif()
 endif()
 if(_ps2x_vu1_clang)

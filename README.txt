@@ -95,7 +95,9 @@ Shinobi (PlayStation 2, USA) - the disc you own, made into an image file.
     build; on older processors it fetches the fallback build once (about 19 MB,
     from the same GitHub release) and starts it by itself. Offline? Download
     Shinobi-SSE4-v<version>.pack from the release page and put it in the bin
-    folder as Shinobi-SSE4.pack.
+    folder as Shinobi-SSE4.pack. On an older CPU, press LOW-END PC in the
+    launcher: it also enables Fast VU maths (PCSX2's default), which avoids
+    the slower exact vector-unit path in gameplay.
   - A graphics card that supports Direct3D 11 (default) or Vulkan.
   - Microsoft Edge WebView2 Runtime for the launcher (already part of
     Windows 11; Windows 10 users can get it free from microsoft.com).

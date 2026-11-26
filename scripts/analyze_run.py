@@ -18,7 +18,9 @@ verify = None
 mismatches = 0
 pads = []
 
-stats_re = re.compile(r"\[stats\] stage=(\d) .*?\| ([\d.]+) fps \(game ([\d.]+)\) \| CPU (\d+)% \| RAM ([\d.]+) GB(?: \| VRAM ([\d.]+) GB)?(?: \| (.*))?$")
+stats_re = re.compile(r"\[stats\] stage=(\d) .*?\| ([\d.]+) fps \(game ([\d.]+)\) \| CPU (\d+)%(?: \| (?:GPU (\d+)%|GPU --))? \| RAM ([\d.]+) GB(?: \| VRAM ([\d.]+) GB)?(?: \| (.*))?$")
+# v0.7's compact title (the one in issue #28's screenshot): FPS / AVG / 1% LOW / CPU / optional GPU / RAM / VRAM.
+stats_title_re = re.compile(r"\[stats\] stage=(\d) .*?\| FPS (\d+) \| AVG (?:\d+|--) \| 1% LOW (?:\d+|--) \| CPU (\d+)%(?: \| (?:GPU (\d+)%|GPU --))? \| RAM ([\d.]+) GB(?: \| VRAM ([\d.]+) GB)?(?: \| (.*))?$")
 vu1_re = re.compile(r"\[vu1-stats\] runs/s=(\d+) pairs/s=(\d+) cycles/s=(\d+) busy=(\d+)% ns/pair=([\d.]+) ns/cycle=([\d.]+)")
 why_re = re.compile(r"\[vu1-why\] execute=(\d+) resume=(\d+) run\(\)=(\d+) compiled_ok=(\d+) skipped\(pending=(\d+) branch/ebit=(\d+)\) no_program=(\d+) compiled_failed=(\d+)")
 hand_re = re.compile(r"\[vu1-why\] handoffs at:(.*)")
@@ -27,10 +29,15 @@ times = []
 verify_re = re.compile(r"\[vu1-verify\] verified=(\d+) mismatches=(\d+)")
 
 for line in open(log, encoding="utf-8", errors="ignore"):
+    m = stats_title_re.search(line)
+    if m:
+        stats.append((int(m.group(1)), float(m.group(2)), float(m.group(2)), int(m.group(3)), float(m.group(5)),
+                      float(m.group(6) or 0), m.group(7) or ""))
+        continue
     m = stats_re.search(line)
     if m:
-        stats.append((int(m.group(1)), float(m.group(2)), float(m.group(3)), int(m.group(4)), float(m.group(5)),
-                      float(m.group(6) or 0), m.group(7) or ""))
+        stats.append((int(m.group(1)), float(m.group(2)), float(m.group(3)), int(m.group(4)), float(m.group(6)),
+                      float(m.group(7) or 0), m.group(8) or ""))
         continue
     m = vu1_re.search(line)
     if m:

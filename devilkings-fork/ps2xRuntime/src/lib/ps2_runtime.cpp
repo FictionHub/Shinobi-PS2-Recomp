@@ -4681,11 +4681,12 @@ void main()
                 low = 1000.0f / (sum / static_cast<float>(worst));
             }
             // The statistics go into the window's title bar (see g_ps2StatsTitle), nothing is drawn over the game.
-            char line[160];
-            std::snprintf(line, sizeof(line), "FPS %.0f | AVG %s | 1%% LOW %s | CPU %s | RAM %s | VRAM %s", fps,
+            char line[192];
+            std::snprintf(line, sizeof(line), "FPS %.0f | AVG %s | 1%% LOW %s | CPU %s | GPU %s | RAM %s | VRAM %s", fps,
                           avg > 0.0 ? std::to_string(static_cast<int>(avg + 0.5)).c_str() : "--",
                           low > 0.0f ? std::to_string(static_cast<int>(low + 0.5f)).c_str() : "--",
                           cpuPercent >= 0 ? (std::to_string(cpuPercent) + "%").c_str() : "--",
+                          gpuPercent >= 0 ? (std::to_string(gpuPercent) + "%").c_str() : "--",
                           ramGb >= 0.0f ? (std::to_string(static_cast<int>(ramGb * 10.0f + 0.5f) / 10) + "." + std::to_string(static_cast<int>(ramGb * 10.0f + 0.5f) % 10) + " GB").c_str() : "--",
                           vramGb >= 0.0f ? (std::to_string(static_cast<int>(vramGb * 10.0f + 0.5f) / 10) + "." + std::to_string(static_cast<int>(vramGb * 10.0f + 0.5f) % 10) + " GB").c_str() : "--");
             {
