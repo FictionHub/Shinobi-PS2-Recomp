@@ -2,6 +2,8 @@
 
 [![Verified developer on RecompStore](https://recompstore.com/assets/press/verified-dark.svg)](https://recompstore.com/dev/therealafsan)
 
+**v0.7.4:** the launcher accepts `.chd` disc images (made with `chdman createdvd` or `createcd`) as well as .iso / .bin / .img, thanks to FictionHub (#27). **[Download v0.7.4](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)**
+
 **v0.7.3:** boss health bar fixed in widescreen (#24), subtitles on by default, Italian / French / German / Spanish subtitles now show in the story movies, the options screen keeps its layout in every language, and "avutil-59.dll was not found" is fixed (the launcher puts back any game file that was removed, for example by an antivirus). **[Download v0.7.3](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)**
 
 **v0.7.2 (hotfix):** Italian / French / German / Spanish voices now play in the story movies too, the launcher always fits the screen (laptops with Windows scaling above 100%), and a fresh install picks a resolution that suits the graphics card (2x on older cards). **[Download v0.7.2](https://github.com/TheRealAfsan/Shinobi-PS2-Recomp/releases/latest)**
