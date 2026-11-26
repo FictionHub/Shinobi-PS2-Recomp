@@ -1,9 +1,10 @@
 """Make synthetic disc images for the launcher's ISO/CHD reader tests.
 
 No game data is used: just a tiny ISO 9660 image with a SYSTEM.CNF that names
-SLUS_204.59, written out as a plain .iso, a raw-sector .bin and a CHD v5 with
-uncompressed hunks. The companion launcher_iso_check.cpp verifies that the
-launcher reads all three the same way.
+SLUS_204.59, written out as a plain .iso, a raw-sector .bin, a createcd-style
+CHD v5 (2448-byte CD frames) and a createdvd-style CHD v5 (2048-byte DVD
+sectors). The launcher_iso_check.cpp companion verifies that the launcher reads
+all five the same way.
 
 Usage: python make_test_images.py <output folder>
 """
@@ -101,6 +102,32 @@ def make_chd(iso):
     return bytes(result)
 
 
+def make_chd_dvd(iso, units_per_hunk=16):
+    """A chdman createdvd-style CHD v5: plain 2048-byte sectors, no sync/mode/ECC header."""
+    units = [iso[n * SECTOR : (n + 1) * SECTOR] for n in range(SECTORS)]
+    hunkbytes = units_per_hunk * SECTOR
+    hunkcount = (len(units) + units_per_hunk - 1) // units_per_hunk
+    hunks = b"".join(b"".join(units[i : i + units_per_hunk]).ljust(hunkbytes, b"\0")
+                     for i in range(0, len(units), units_per_hunk))
+
+    header = bytearray(124)
+    header[0:8] = b"MComprHD"
+    struct.pack_into(">I", header, 8, len(header))
+    struct.pack_into(">I", header, 12, 5)
+    struct.pack_into(">Q", header, 32, len(units) * SECTOR)
+    struct.pack_into(">Q", header, 40, len(header))
+    struct.pack_into(">Q", header, 48, 0)
+    struct.pack_into(">I", header, 56, hunkbytes)
+    struct.pack_into(">I", header, 60, SECTOR)  # DVD sector size: the case chdman createdvd writes
+    data_offset = ((len(header) + 4 * hunkcount + hunkbytes - 1) // hunkbytes) * hunkbytes
+    mapping = b"".join(struct.pack(">I", data_offset // hunkbytes + n) for n in range(hunkcount))
+    result = bytearray(data_offset + len(hunks))
+    result[: len(header)] = header
+    result[len(header) : len(header) + len(mapping)] = mapping
+    result[data_offset:] = hunks
+    return bytes(result)
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__.strip())
@@ -115,7 +142,9 @@ def main():
             f.write(raw_frame(iso[n * SECTOR : (n + 1) * SECTOR], n)[:2352])
     with open(os.path.join(folder, "test.chd"), "wb") as f:
         f.write(make_chd(iso))
-    print("Wrote test.iso, test.bin and test.chd to", folder)
+    with open(os.path.join(folder, "test-dvd.chd"), "wb") as f:
+        f.write(make_chd_dvd(iso))
+    print("Wrote test.iso, test.bin, test.chd and test-dvd.chd to", folder)
     return 0
 
 

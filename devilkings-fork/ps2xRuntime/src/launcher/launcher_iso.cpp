@@ -16,9 +16,10 @@ namespace launcher::iso
 {
     namespace
     {
-        // A CHD stores CD frames of 2352 raw bytes + 96 subcode bytes. Mode 1's 2048 ISO bytes start 16 bytes into the
-        // raw frame (12 sync + 3 address + 1 mode); Mode 2 Form 1 puts them at 24.
+        // CHD frames are either CD frames (2352 raw bytes + 96 subcode bytes) or DVD sectors (2048 bytes). Mode 1's
+        // 2048 ISO bytes start 16 bytes into a CD frame (12 sync + 3 address + 1 mode); Mode 2 Form 1 puts them at 24.
         constexpr uint32_t kCdFrameBytes = 2448;
+        constexpr uint32_t kDvdSectorBytes = 2048;
         constexpr uint32_t kMode1DataOffset = 16;
         constexpr uint32_t kMode2Form1DataOffset = 24;
 
@@ -30,6 +31,7 @@ namespace launcher::iso
             std::vector<uint8_t> hunk; // one decoded CHD hunk, reused while extracting
             uint32_t cachedHunk = std::numeric_limits<uint32_t>::max();
             uint32_t framesPerHunk = 0;
+            uint32_t unitBytes = 0; // 2448 for createcd CHDs, 2048 for createdvd CHDs
             uint64_t totalFrames = 0;
             uint32_t sectorSize = 2048; // bytes per sector in the file (plain images)
             uint32_t dataOffset = 0;    // where the 2048 data bytes start inside a sector (plain images)
@@ -60,7 +62,9 @@ namespace launcher::iso
         private:
             bool readChdSector(uint32_t lba, uint8_t *out2048)
             {
-                const uint64_t frame = lba; // a single-track CD: disc LBA 0 is CHD frame 0
+                // DVD CHDs (chdman createdvd, the PCSX2-recommended form for PS2 discs) store a plain 2048-byte ISO
+                // sector per unit. CD CHDs (createcd) store 2448-byte frames with a sync/mode header to skip.
+                const uint64_t frame = lba; // both layouts start at disc LBA 0
                 if (frame >= totalFrames)
                     return false;
                 const uint32_t number = static_cast<uint32_t>(frame / framesPerHunk);
@@ -70,8 +74,13 @@ namespace launcher::iso
                         return false;
                     cachedHunk = number;
                 }
-                const uint8_t *sector = hunk.data() + static_cast<size_t>(frame % framesPerHunk) * kCdFrameBytes;
-                // Byte 15 of a raw sector is its mode. Only Mode 1 and Mode 2 Form 1 carry 2048 ISO bytes.
+                const uint8_t *sector = hunk.data() + static_cast<size_t>(frame % framesPerHunk) * unitBytes;
+                if (unitBytes == kDvdSectorBytes)
+                {
+                    std::memcpy(out2048, sector, 2048);
+                    return true;
+                }
+                // Byte 15 of a raw CD sector is its mode. Only Mode 1 and Mode 2 Form 1 carry 2048 ISO bytes.
                 uint32_t offset = 0;
                 if (sector[15] == 1)
                     offset = kMode1DataOffset;
@@ -107,12 +116,16 @@ namespace launcher::iso
                 return false;
             }
             const chd_header *header = chd_get_header(image.chd);
-            if (header->unitbytes != kCdFrameBytes || header->hunkbytes == 0 ||
+            const bool cd = header->unitbytes == kCdFrameBytes;
+            const bool dvd = header->unitbytes == kDvdSectorBytes;
+            if ((!cd && !dvd) || header->hunkbytes == 0 ||
                 header->hunkbytes % header->unitbytes != 0 || header->hunkbytes > 4u * 1024u * 1024u)
             {
-                error = "This CHD is not a CD image with 2448-byte frames (make it from a disc with chdman createcd).";
+                error = "This CHD is not a 2048-byte DVD or 2448-byte CD image (make it from your own disc with "
+                        "chdman createdvd or createcd).";
                 return false;
             }
+            image.unitBytes = header->unitbytes;
             image.framesPerHunk = header->hunkbytes / header->unitbytes;
             image.totalFrames = header->unitcount;
             image.sectors = header->unitcount;

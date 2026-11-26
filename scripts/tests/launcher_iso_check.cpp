@@ -1,12 +1,11 @@
 // Standalone check for launcher_iso.cpp: reads the images made by make_test_images.py and verifies that the plain ISO,
-// raw-sector BIN and CHD paths all find the same SYSTEM.CNF and extract the same file bytes.
+// raw-sector BIN, createcd-style CHD and createdvd-style CHD paths all find the same SYSTEM.CNF and extract the same
+// file bytes.
 //
-// Build (MinGW, after configuring libchdr with CMake):
-//   g++ -std=c++20 -I devilkings-fork/ps2xRuntime/src/launcher -I third_party/libchdr/include \
-//       scripts/tests/launcher_iso_check.cpp devilkings-fork/ps2xRuntime/src/launcher/launcher_iso.cpp \
-//       <build>/libchdr-static.a <build>/deps/miniz-3.1.1/libminiz.a \
-//       <build>/deps/lzma-25.01/libchdr-lzma.a <build>/deps/zstd-1.5.7/libzstd.a -o launcher_iso_check.exe
-// Run: launcher_iso_check.exe <folder with test.iso, test.bin, test.chd>
+// Build after configuring devilkings-fork/ps2xRuntime/cmake/libchdr (target shinobi-chdr plus its three static
+// dependencies), e.g. with cl /std:c++20 /utf-8 /EHsc /MD /I<launcher src> /I<third_party/libchdr/include>
+// launcher_iso_check.cpp launcher_iso.cpp <libs> legacy_stdio_definitions.lib /Fe:launcher_iso_check.exe
+// Run: launcher_iso_check.exe <folder with test.iso, test.bin, test.chd, test-dvd.chd>
 
 #include "launcher_iso.h"
 
@@ -22,7 +21,7 @@ int main(int argc, char **argv)
 {
     if (argc != 2)
     {
-        std::cerr << "Usage: launcher_iso_check <folder with test.iso, test.bin, test.chd>\n";
+        std::cerr << "Usage: launcher_iso_check <folder with test.iso, test.bin, test.chd, test-dvd.chd>\n";
         return 2;
     }
     const fs::path folder = argv[1];
@@ -33,7 +32,7 @@ int main(int argc, char **argv)
     for (int n = 0; n < 12; ++n)
         wanted.insert(wanted.end(), pattern.begin(), pattern.end());
 
-    for (const char *name : {"test.iso", "test.bin", "test.chd"})
+    for (const char *name : {"test.iso", "test.bin", "test.chd", "test-dvd.chd"})
     {
         const fs::path image = folder / name;
         const launcher::iso::Check check = launcher::iso::check(image, "SLUS_204.59");

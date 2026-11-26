@@ -1,6 +1,6 @@
-// Reads a PS2 disc image (ISO 9660: .iso, a .bin / .img with raw 2352-byte sectors, or a MAME .chd of a CD) so the
-// launcher can check that it is the game it needs and copy the game's files out of it. No game data is stored in this
-// program: the user's own disc image is the only source.
+// Reads a PS2 disc image (ISO 9660: .iso, a .bin / .img with raw 2352-byte sectors, or a MAME .chd made with either
+// createdvd or createcd) so the launcher can check that it is the game it needs and copy the game's files out of it.
+// No game data is stored in this program: the user's own disc image is the only source.
 #pragma once
 
 #include <cstdint>

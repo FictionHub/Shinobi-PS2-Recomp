@@ -456,7 +456,7 @@ Developed on a Ryzen 7 9800X3D and a GeForce RTX 5080. The CPU is the main limit
 
 The launcher remembers where your game file is and shows it under the Game File button.
 
-A compressed `.chd` made from your own disc works for this setup too (both uncompressed and the usual codecs). Pick it with the bundled **Shinobi Launcher.exe**; RecompLauncher's own picker still asks for a plain disc image. The optional European disc for the other languages still has to be an `.iso` / `.bin` / `.img`: the game reads that one while it runs, outside the launcher.
+A compressed `.chd` made from your own disc works for this setup too, whether you use `chdman createdvd` (recommended for PS2) or `createcd`, with compressed or uncompressed hunks. Pick it with the bundled **Shinobi Launcher.exe**; RecompLauncher's own picker still asks for a plain disc image. The optional European disc for the other languages still has to be an `.iso` / `.bin` / `.img`: the game reads that one while it runs, outside the launcher.
 
 ## Controls
 
