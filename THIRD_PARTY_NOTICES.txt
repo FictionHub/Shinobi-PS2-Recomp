@@ -46,3 +46,12 @@ The game
 
 LZMA SDK (launcher: unpacking bin/Shinobi.pack)
   Igor Pavlov, https://www.7-zip.org/sdk.html - placed in the public domain.
+
+libchdr v0.3.0 (launcher: reading the player's .chd disc images)
+  Romain Tisserand and contributors - BSD-3-Clause - https://github.com/rtissera/libchdr
+  Pinned source in third_party/libchdr (LICENSE.txt), built into the launcher.
+  Its vendored decoder dependencies (all GPL-compatible) are:
+    LZMA SDK 25.01 - Igor Pavlov - public domain - https://www.7-zip.org/sdk.html
+    miniz 3.1.1 - Rich Geldreich - public domain (Unlicense) - https://github.com/richgel999/miniz
+    zstd 1.5.7 - Meta Platforms - BSD-style license (the option chosen here) - https://github.com/facebook/zstd
+    dr_flac 0.13.3 - David Reid - public domain / MIT-0 - https://github.com/mackron/dr_libs

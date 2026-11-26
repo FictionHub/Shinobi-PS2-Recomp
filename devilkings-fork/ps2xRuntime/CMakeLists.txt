@@ -769,6 +769,11 @@ install(DIRECTORY include/
 # LOCAL PATCH: Shinobi (PS2 Recomp) Launcher - a settings window that writes game/settings.ini and starts the game.
 if(WIN32 AND NOT PS2X_IS_VITA)
     # The window shows launcher_assets/launcher.html (the Claude Design page) in Microsoft Edge WebView2.
+    # CHD images of the player's own disc: libchdr (BSD-3-Clause, pinned v0.3.0) with its codec dependencies
+    # vendored in third_party, built by cmake/libchdr so no options leak into the runtime project and no extra
+    # DLL is needed. EXCLUDE_FROM_ALL keeps the decoder out of builds that do not link the launcher.
+    add_subdirectory(cmake/libchdr "${CMAKE_CURRENT_BINARY_DIR}/libchdr" EXCLUDE_FROM_ALL)
+
     set(PS2X_WEBVIEW2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/webview2/build/native" CACHE PATH "WebView2 SDK build/native folder")
     add_executable(ShinobiLauncher WIN32
         src/launcher/launcher_webview.cpp
@@ -789,7 +794,7 @@ if(WIN32 AND NOT PS2X_IS_VITA)
     target_include_directories(ShinobiLauncher PRIVATE "${PS2X_WEBVIEW2_DIR}/include")
     target_link_libraries(ShinobiLauncher PRIVATE "${PS2X_WEBVIEW2_DIR}/x64/WebView2LoaderStatic.lib"
         version shlwapi ole32 user32 dwmapi shell32 advapi32 winhttp
-        windowsapp) # LOCAL PATCH: Windows.Data.Pdf for the manual (launcher_manual.cpp)
+        windowsapp shinobi-chdr) # LOCAL PATCH: Windows.Data.Pdf for the manual (launcher_manual.cpp); shinobi-chdr for .chd images
     if(MSVC)
         target_compile_options(ShinobiLauncher PRIVATE /utf-8)
     endif()

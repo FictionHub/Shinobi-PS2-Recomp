@@ -5,7 +5,10 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <vector>
+
+#include <libchdr/chd.h>
 
 namespace fs = std::filesystem;
 
@@ -13,19 +16,82 @@ namespace launcher::iso
 {
     namespace
     {
+        // CHD frames are either CD frames (2352 raw bytes + 96 subcode bytes) or DVD sectors (2048 bytes). Mode 1's
+        // 2048 ISO bytes start 16 bytes into a CD frame (12 sync + 3 address + 1 mode); Mode 2 Form 1 puts them at 24.
+        constexpr uint32_t kCdFrameBytes = 2448;
+        constexpr uint32_t kDvdSectorBytes = 2048;
+        constexpr uint32_t kMode1DataOffset = 16;
+        constexpr uint32_t kMode2Form1DataOffset = 24;
+
         struct Image
         {
-            std::ifstream file;
-            uint32_t sectorSize = 2048; // bytes per sector in the file
-            uint32_t dataOffset = 0;    // where the 2048 data bytes start inside a sector
+            std::ifstream file;  // plain .iso / .bin / .img
+            FILE *raw = nullptr; // the FILE handed to libchdr (libchdr does not take ownership)
+            chd_file *chd = nullptr;
+            std::vector<uint8_t> hunk; // one decoded CHD hunk, reused while extracting
+            uint32_t cachedHunk = std::numeric_limits<uint32_t>::max();
+            uint32_t framesPerHunk = 0;
+            uint32_t unitBytes = 0; // 2448 for createcd CHDs, 2048 for createdvd CHDs
+            uint64_t totalFrames = 0;
+            uint32_t sectorSize = 2048; // bytes per sector in the file (plain images)
+            uint32_t dataOffset = 0;    // where the 2048 data bytes start inside a sector (plain images)
             uint64_t sectors = 0;
+
+            ~Image()
+            {
+                if (chd)
+                    chd_close(chd);
+                if (raw)
+                    std::fclose(raw);
+            }
+
+            Image() = default;
+            Image(const Image &) = delete;
+            Image &operator=(const Image &) = delete;
 
             bool readSector(uint32_t lba, uint8_t *out2048)
             {
+                if (chd)
+                    return readChdSector(lba, out2048);
                 file.clear();
                 file.seekg(static_cast<std::streamoff>(static_cast<uint64_t>(lba) * sectorSize + dataOffset));
                 file.read(reinterpret_cast<char *>(out2048), 2048);
                 return static_cast<bool>(file) && file.gcount() == 2048;
+            }
+
+        private:
+            bool readChdSector(uint32_t lba, uint8_t *out2048)
+            {
+                // DVD CHDs (chdman createdvd, the PCSX2-recommended form for PS2 discs) store a plain 2048-byte ISO
+                // sector per unit. CD CHDs (createcd) store 2448-byte frames with a sync/mode header to skip.
+                const uint64_t frame = lba; // both layouts start at disc LBA 0
+                if (frame >= totalFrames)
+                    return false;
+                const uint32_t number = static_cast<uint32_t>(frame / framesPerHunk);
+                if (number != cachedHunk)
+                {
+                    if (chd_read(chd, number, hunk.data()) != CHDERR_NONE)
+                        return false;
+                    cachedHunk = number;
+                }
+                const uint8_t *sector = hunk.data() + static_cast<size_t>(frame % framesPerHunk) * unitBytes;
+                if (unitBytes == kDvdSectorBytes)
+                {
+                    std::memcpy(out2048, sector, 2048);
+                    return true;
+                }
+                // Byte 15 of a raw CD sector is its mode. Only Mode 1 and Mode 2 Form 1 carry 2048 ISO bytes.
+                uint32_t offset = 0;
+                if (sector[15] == 1)
+                    offset = kMode1DataOffset;
+                else if (sector[15] == 2 && sector[23] == 1)
+                    offset = kMode2Form1DataOffset;
+                else
+                    return false;
+                if (offset + 2048 > kCdFrameBytes)
+                    return false;
+                std::memcpy(out2048, sector + offset, 2048);
+                return true;
             }
         };
 
@@ -39,8 +105,58 @@ namespace launcher::iso
 
         uint32_t le32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24); }
 
+        // CHDs are recognised by their magic, not by the file name, just like the ISO layouts below. The FILE stays open
+        // for libchdr's lifetime; Image's destructor closes both it and the chd_file.
+        bool openChd(Image &image, const fs::path &path, std::string &error)
+        {
+            const chd_error err = chd_open_file(image.raw, CHD_OPEN_READ, nullptr, &image.chd);
+            if (err != CHDERR_NONE)
+            {
+                error = std::string("This CHD image could not be opened: ") + chd_error_string(err);
+                return false;
+            }
+            const chd_header *header = chd_get_header(image.chd);
+            const bool cd = header->unitbytes == kCdFrameBytes;
+            const bool dvd = header->unitbytes == kDvdSectorBytes;
+            if ((!cd && !dvd) || header->hunkbytes == 0 ||
+                header->hunkbytes % header->unitbytes != 0 || header->hunkbytes > 4u * 1024u * 1024u)
+            {
+                error = "This CHD is not a 2048-byte DVD or 2448-byte CD image (make it from your own disc with "
+                        "chdman createdvd or createcd).";
+                return false;
+            }
+            image.unitBytes = header->unitbytes;
+            image.framesPerHunk = header->hunkbytes / header->unitbytes;
+            image.totalFrames = header->unitcount;
+            image.sectors = header->unitcount;
+            image.hunk.resize(header->hunkbytes);
+            image.cachedHunk = std::numeric_limits<uint32_t>::max();
+            return true;
+        }
+
         bool openImage(Image &image, const fs::path &path, std::string &error)
         {
+#if defined(_WIN32)
+            image.raw = _wfopen(path.wstring().c_str(), L"rb");
+#else
+            image.raw = std::fopen(path.string().c_str(), "rb");
+#endif
+            if (!image.raw)
+            {
+                error = "The file could not be opened.";
+                return false;
+            }
+            char magic[8] = {};
+            const bool isChd = std::fread(magic, 1, sizeof(magic), image.raw) == sizeof(magic) &&
+                               std::memcmp(magic, "MComprHD", sizeof(magic)) == 0;
+            if (isChd)
+            {
+                std::rewind(image.raw);
+                return openChd(image, path, error);
+            }
+            std::fclose(image.raw);
+            image.raw = nullptr;
+
             image.file.open(path, std::ios::binary);
             if (!image.file)
             {

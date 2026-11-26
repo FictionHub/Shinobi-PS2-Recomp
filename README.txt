@@ -100,7 +100,9 @@ Shinobi (PlayStation 2, USA) - the disc you own, made into an image file.
   - The Microsoft Visual C++ Redistributable (x64), which most PCs already
     have. If the game does not start, install it free from microsoft.com.
   - YOUR OWN disc image of Shinobi (PS2, USA, game ID SLUS-20459) as an
-    .iso file (a .bin or .img with raw sectors also works).
+    .iso file (a .bin or .img with raw sectors, or a .chd made from your
+    own disc, also works). The European disc for the other languages
+    must stay an .iso / .bin / .img: the game reads it outside the launcher.
   - About 1.5 GB of free space for the game's files, plus room for saves.
 
 It was developed and tested on a Ryzen 7 9800X3D with a GeForce RTX 5080. The
